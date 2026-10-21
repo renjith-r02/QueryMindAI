@@ -51,7 +51,10 @@ class FakeLLM:
         self.calls += 1
         if schema is IntentClassification:
             return IntentClassification(
-                query_type=self.query_type, traits=[], tables_mentioned=["orders"], columns_mentioned=[],
+                query_type=self.query_type,
+                traits=[],
+                tables_mentioned=["orders"],
+                columns_mentioned=[],
                 reason="fake",
             )
         if schema is FinalAnswer:
@@ -71,7 +74,12 @@ def service(tmp_path: Path) -> QueryMindService:
     shop = tmp_path / "shop.db"
     with sqlite3.connect(shop) as connection:
         connection.executescript("CREATE TABLE t (n INTEGER); INSERT INTO t VALUES (1), (2), (3);")
-    settings = Settings(qdrant_url=":memory:", collection="kb", source_dir=DEFAULT_SOURCE_DIR, max_rows=100)
+    settings = Settings(
+        qdrant_url=":memory:",
+        collection="kb",
+        source_dir=DEFAULT_SOURCE_DIR,
+        max_rows=100,
+    )
     service = QueryMindService(
         settings,
         embedder=HashingEmbedder(),

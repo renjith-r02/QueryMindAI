@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { askQuestion } from "@/api/query";
 import { useHistoryStore } from "@/features/history/store";
-import { selectGuardSettings, useSettingsStore } from "@/features/settings/store";
 import type { ProgressStep } from "@/types/progress";
 import type { ClarifyOption, QueryResult } from "@/types/query";
 import type { Run, RunStatus } from "@/types/run";
@@ -90,7 +89,7 @@ export const useAskStore = create<AskStore>()((set, get) => {
       set({ phase: { kind: "loading", question: trimmed, startedAt, steps: [] } });
 
       try {
-        const outcome = await askQuestion(trimmed, selectGuardSettings(useSettingsStore.getState()), {
+        const outcome = await askQuestion(trimmed, {
           useCache: !fresh,
           signal: controller.signal,
           onProgress: (step) => {

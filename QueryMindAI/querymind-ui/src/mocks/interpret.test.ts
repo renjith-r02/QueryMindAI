@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_POLICY } from "@/mocks/guardrails";
 import { capLimit, interpret } from "@/mocks/interpret";
-import type { GuardSettings } from "@/types/settings";
 
-const guards: GuardSettings = { selectOnly: true, blockDestructive: true, domainRules: true, maxRows: 1000 };
+const guards = DEFAULT_POLICY;
 
 describe("capLimit", () => {
   it("lowers an existing LIMIT to the maximum", () => {
@@ -19,9 +19,12 @@ describe("interpret", () => {
     expect(interpret("delete all orders", guards).kind).toBe("blocked");
   });
 
-  it("blocks sensitive fields under domain rules only", () => {
+  it("blocks sensitive fields only while that rule is enabled", () => {
     expect(interpret("show customer password", guards).kind).toBe("blocked");
-    expect(interpret("show customer password", { ...guards, domainRules: false }).kind).toBe("result");
+    const rules = guards.question_rules.map((rule) =>
+      rule.id === "sensitive-data" ? { ...rule, enabled: false } : rule,
+    );
+    expect(interpret("show customer password", { ...guards, question_rules: rules }).kind).toBe("result");
   });
 
   it("asks to clarify an ambiguous amount", () => {

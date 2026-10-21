@@ -38,7 +38,12 @@ def list_datasources(service: Service) -> list[DataSource]:
     return service.list_datasources()
 
 
-@router.get("/{source_id}", response_model=DataSource, responses=NOT_FOUND, summary="Get a data source")
+@router.get(
+    "/{source_id}",
+    response_model=DataSource,
+    responses=NOT_FOUND,
+    summary="Get a data source",
+)
 def get_datasource(source_id: str, service: Service) -> DataSource:
     if source_id.startswith(ENV_ID):
         return _env_entry(source_id, service)

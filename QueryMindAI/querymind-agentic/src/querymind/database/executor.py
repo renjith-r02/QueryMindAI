@@ -7,8 +7,9 @@ Each logical database name used in the schema files (e.g. ``ecommerce``,
     QUERYMIND_DB_ECOMMERCE=mysql+pymysql://user:pass@localhost:3306/ecommerce
     QUERYMIND_DB_RETURNS_DB=postgresql+psycopg://user:pass@localhost:5432/returns_db
 
-Every query runs in a read-only transaction with a statement timeout, and at
-most ``max_rows`` rows are fetched.
+Every query is checked against the guardrails, runs in a read-only transaction with a
+statement timeout, and at most ``max_rows`` rows are fetched; restricted columns are
+removed from the results.
 """
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from querymind.database.safety import UnsafeQueryError, ensure_read_only
+from querymind.exceptions import UnsafeQueryError
+from querymind.guardrails import DEFAULT_GUARDRAILS, Guardrails
 
 ENV_PREFIX = "QUERYMIND_DB_"
 _SYSTEM_SCHEMAS = {"information_schema", "pg_catalog", "pg_toast", "mysql", "performance_schema", "sys"}
@@ -57,9 +59,16 @@ class QueryResult:
 
 
 class DatabaseRegistry:
-    def __init__(self, urls: dict[str, str], max_rows: int = 1000, timeout_seconds: int = 30):
+    def __init__(
+        self,
+        urls: dict[str, str],
+        max_rows: int = 1000,
+        timeout_seconds: int = 30,
+        guardrails: Guardrails = DEFAULT_GUARDRAILS,
+    ):
         self.urls = {name.lower(): url for name, url in urls.items()}
         self.max_rows = max_rows
+        self.guardrails = guardrails
         self.timeout_ms = timeout_seconds * 1000
         self._engines: dict[str, Engine] = {}
         self._objects: dict[str, list[str]] = {}
@@ -71,9 +80,13 @@ class DatabaseRegistry:
         }
         return cls(urls, **kwargs)
 
-    def with_limits(self, max_rows: int, timeout_seconds: int) -> DatabaseRegistry:
-        """A registry with other limits that reuses this one's engines and schema cache."""
-        clone = DatabaseRegistry(self.urls, max_rows=max_rows, timeout_seconds=timeout_seconds)
+    def with_limits(
+        self, max_rows: int, timeout_seconds: int, guardrails: Guardrails | None = None
+    ) -> DatabaseRegistry:
+        """A registry with other limits (and guardrails) that reuses this one's engines and schema cache."""
+        clone = DatabaseRegistry(
+            self.urls, max_rows=max_rows, timeout_seconds=timeout_seconds, guardrails=guardrails or self.guardrails
+        )
         clone._engines = self._engines
         clone._objects = self._objects
         return clone
@@ -123,7 +136,7 @@ class DatabaseRegistry:
                 error_kind="config",
             )
         try:
-            statement = ensure_read_only(sql)
+            statement = self.guardrails.ensure_sql(sql)
         except UnsafeQueryError as error:
             return QueryResult(name, sql, error=f"Refused to run query: {error}", error_kind="unsafe")
 
@@ -141,11 +154,12 @@ class DatabaseRegistry:
             message = str(getattr(error, "orig", None) or error).strip()
             return QueryResult(name, sql, error=message, error_kind="database", elapsed_ms=_elapsed(started))
 
+        columns, kept = self.guardrails.redact(columns, [list(row) for row in rows[: self.max_rows]])
         return QueryResult(
             name,
             sql,
             columns=columns,
-            rows=[[_plain(value) for value in row] for row in rows[: self.max_rows]],
+            rows=[[_plain(value) for value in row] for row in kept],
             truncated=len(rows) > self.max_rows,
             elapsed_ms=_elapsed(started),
         )
@@ -164,10 +178,12 @@ class DatabaseRegistry:
             conn.exec_driver_sql("BEGIN")
 
 
-def merge_results(results: list[QueryResult], merge_sql: str) -> QueryResult:
+def merge_results(
+    results: list[QueryResult], merge_sql: str, guardrails: Guardrails = DEFAULT_GUARDRAILS
+) -> QueryResult:
     """Combine several result sets with a SQLite query over tables q1, q2, ..."""
     try:
-        statement = ensure_read_only(merge_sql)
+        statement = guardrails.ensure_sql(merge_sql)
     except UnsafeQueryError as error:
         return QueryResult("merge", merge_sql, error=f"Refused to run merge: {error}", error_kind="unsafe")
 

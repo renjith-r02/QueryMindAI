@@ -33,7 +33,11 @@ def index(body: IndexRequest, service: Service) -> IndexResponse:
         paths = [available[name] for name in dict.fromkeys(body.files)]
 
     report = service.index(
-        paths, database=body.database, dialect=body.dialect, recreate=body.recreate, dry_run=body.dry_run
+        paths,
+        database=body.database,
+        dialect=body.dialect,
+        recreate=body.recreate,
+        dry_run=body.dry_run,
     )
     return IndexResponse.from_report(report, include_chunks=body.include_chunks)
 

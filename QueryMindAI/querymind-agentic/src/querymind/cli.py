@@ -16,6 +16,10 @@
     # use OpenAI GPT-6 Luna instead of the default Gemini for this run
     uv run python -m querymind run "orders per month this year" --llm-provider openai
 
+    # evaluate on the test set (evaluation/test_set.json); writes evaluation/reports/<timestamp>/
+    uv run python -m querymind evaluate
+    uv run python -m querymind evaluate --validate-only     # check ground-truth SQL, no model calls
+
 Settings come from flags, the environment, or querymind-agentic/.env
 (see .env.example): GEMINI_API_KEY, OPENAI_API_KEY, EMBEDDING_PROVIDER, EMBEDDING_MODEL,
 EMBEDDING_DIM, LLM_PROVIDER, LLM_MODEL, LLM_REASONING_EFFORT, QDRANT_URL, QDRANT_API_KEY, QDRANT_COLLECTION,
@@ -32,6 +36,7 @@ from pathlib import Path
 from querymind.agent.rag import RagAnswer
 from querymind.agent.sql_agent import AgentResult
 from querymind.config import Settings
+from querymind.evaluation.dataset import DEFAULT_FEW_SHOT, DEFAULT_REPORTS, DEFAULT_TEST_SET
 from querymind.exceptions import CollectionMismatchError, MissingApiKeyError, NoSourceFilesError
 from querymind.intent import Intent
 from querymind.knowledge.embeddings import DEFAULT_MODELS, PROVIDERS
@@ -108,13 +113,49 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     result = _service(args).run(
-        args.question, database=args.database, max_repairs=args.max_repairs, on_progress=_progress_printer(args)
+        args.question,
+        database=args.database,
+        max_repairs=args.max_repairs,
+        max_rows=args.max_rows,
+        on_progress=_progress_printer(args),
     )
     if args.json:
         print(json.dumps(result.to_dict(), indent=2, default=str))
     else:
         _print_agent_result(result, show_sql=args.show_sql, preview_rows=args.preview_rows)
     return 0 if result.status in {"answered", "generated"} else 1
+
+
+def cmd_evaluate(args: argparse.Namespace) -> int:
+    import datetime as dt
+
+    from querymind.evaluation import Evaluator, summary, validate, write_report  # imports sqlglot
+
+    service = _service(args)
+    checked, issues = validate(service, args.test_set, args.few_shot)
+    print(f"Validated {checked} ground-truth and few-shot statements on the live databases: {len(issues)} problem(s)")
+    for issue in issues:
+        print(f"  {issue.source} {issue.id}: {issue.problem}")
+    if args.validate_only:
+        return 1 if issues else 0
+
+    def progress(case) -> None:
+        verdict = "PASS" if case.execution_match else "FAIL"
+        exact = "exact" if case.exact_match else "semantic" if case.semantic_match else "different SQL"
+        print(f"{case.id} {case.query_type:<17} {verdict} ({exact}, {case.latency_ms / 1000:.1f} s) {case.reason}")
+
+    evaluator = Evaluator(service, max_repairs=args.max_repairs, on_case=progress)
+    ids = set(args.ids) if args.ids else None
+    run = evaluator.run(args.test_set, args.few_shot, ids=ids, probes=not args.no_probes)
+    output = args.output or DEFAULT_REPORTS / dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    markdown, data = write_report(run, Path(output))
+    overall = summary(run)["overall"]
+    print(
+        f"\nExecution accuracy {overall['execution_accuracy']:.1%} | exact match {overall['exact_match_rate']:.1%} | "
+        f"semantic match {overall['semantic_match_rate']:.1%} over {overall['cases']} cases"
+    )
+    print(f"Report: {markdown}\nResults: {data}")
+    return 0
 
 
 def _print_intent(intent: Intent | None) -> None:
@@ -258,13 +299,33 @@ def build_parser(settings: Settings) -> argparse.ArgumentParser:
     run.add_argument("question")
     run.add_argument("--database", help="restrict retrieval to one database, e.g. ecommerce")
     _add_llm_arguments(run, settings)
-    run.add_argument("--max-rows", type=int, help=f"maximum rows fetched per query (default {settings.max_rows})")
+    run.add_argument(
+        "--max-rows", type=int, help="maximum rows fetched per query (default and upper bound: the guardrail row limit)"
+    )
     run.add_argument("--timeout", type=int, help=f"statement timeout in seconds (default {settings.query_timeout})")
     run.add_argument("--max-repairs", type=int, default=2, help="times to regenerate SQL after an error")
     run.add_argument("--preview-rows", type=int, default=20, help="result rows to print (0 = none)")
     run.add_argument("--show-sql", action="store_true", help="print the executed SQL")
     run.add_argument("--json", action="store_true", help="print everything as JSON")
     run.set_defaults(func=cmd_run)
+
+    evaluate = commands.add_parser(
+        "evaluate",
+        help="score text-to-SQL on the test set: execution accuracy, exact/semantic match, by query type",
+    )
+    evaluate.add_argument("--test-set", type=Path, default=DEFAULT_TEST_SET, help="test set JSON")
+    evaluate.add_argument("--few-shot", type=Path, default=DEFAULT_FEW_SHOT, help="few-shot library JSON")
+    evaluate.add_argument("--output", type=Path, help=f"report directory (default: {DEFAULT_REPORTS}/<timestamp>)")
+    evaluate.add_argument("--ids", nargs="+", help="only these case/probe ids, e.g. T01 T05 G01")
+    evaluate.add_argument("--max-repairs", type=int, default=2, help="self-repair attempts per question")
+    evaluate.add_argument("--no-probes", action="store_true", help="skip the guardrail probes")
+    evaluate.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="only run the ground-truth and few-shot SQL on the databases (no model calls)",
+    )
+    _add_llm_arguments(evaluate, settings)
+    evaluate.set_defaults(func=cmd_evaluate)
     parser.set_defaults(settings=settings)
     return parser
 

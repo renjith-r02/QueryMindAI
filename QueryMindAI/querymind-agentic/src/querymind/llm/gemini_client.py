@@ -10,6 +10,8 @@ from collections.abc import Callable
 from querymind.exceptions import MissingApiKeyError
 
 _RETRY_STATUS = {429, 500, 503}
+#: Per-request limit. Without one, a stalled response blocks the caller forever; timeouts are retried.
+REQUEST_TIMEOUT_SECONDS = 120
 
 
 def make_client(api_key: str | None = None):
@@ -21,20 +23,27 @@ def make_client(api_key: str | None = None):
             "No Gemini API key. Set GEMINI_API_KEY in the environment or in querymind-agentic/.env, "
             "or pass --api-key. Create a key at https://aistudio.google.com/apikey"
         )
-    return genai.Client(api_key=api_key)
+    from google.genai import types
+
+    return genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_SECONDS * 1000))
 
 
 def with_retry[T](call: Callable[[], T], max_retries: int = 5) -> T:
-    """Run `call`, retrying rate-limit and transient server errors.
+    """Run `call`, retrying rate-limit and transient server errors, and timed-out requests.
 
     Waits for the server's RetryInfo delay when given (free-tier quotas are per
     minute), otherwise backs off exponentially.
     """
+    import httpx
     from google.genai import errors
 
     for attempt in range(max_retries + 1):
         try:
             return call()
+        except httpx.TimeoutException:
+            if attempt == max_retries:
+                raise
+            time.sleep(min(2**attempt, 30))
         except errors.APIError as error:
             if error.code not in _RETRY_STATUS or attempt == max_retries:
                 raise

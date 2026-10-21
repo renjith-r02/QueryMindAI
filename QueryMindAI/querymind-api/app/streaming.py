@@ -27,7 +27,9 @@ class StreamCancelled(Exception):
 _DONE = object()
 
 
-async def stream_operation(work: Callable[[ProgressCallback], BaseModel]) -> AsyncIterator[ServerSentEvent]:
+async def stream_operation(
+    work: Callable[[ProgressCallback], BaseModel],
+) -> AsyncIterator[ServerSentEvent]:
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     cancelled = threading.Event()

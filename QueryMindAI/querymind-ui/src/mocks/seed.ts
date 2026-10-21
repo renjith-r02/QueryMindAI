@@ -1,6 +1,6 @@
+import { DEFAULT_POLICY } from "@/mocks/guardrails";
 import { interpret } from "@/mocks/interpret";
 import type { Run } from "@/types/run";
-import type { GuardSettings } from "@/types/settings";
 
 const SEED: Pick<Run, "id" | "question" | "at" | "ms">[] = [
   {
@@ -14,9 +14,9 @@ const SEED: Pick<Run, "id" | "question" | "at" | "ms">[] = [
 ];
 
 /** Example history shown on first visit, before the user has asked anything. */
-export function seedHistory(settings: GuardSettings): Run[] {
+export function seedHistory(): Run[] {
   return SEED.map((seed) => {
-    const outcome = interpret(seed.question, settings);
+    const outcome = interpret(seed.question, DEFAULT_POLICY);
     const result = outcome.kind === "result" ? outcome.result : null;
     return {
       ...seed,

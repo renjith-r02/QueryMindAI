@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from querymind.database.safety import check_read_only, check_update
+from querymind.guardrails import DEFAULT_GUARDRAILS, Guardrails
 from querymind.intent import Intent, IntentClassifier
 from querymind.knowledge.store import KnowledgeStore
 from querymind.llm.providers import LLM
@@ -150,17 +150,19 @@ class QueryMindRAG:
         llm: LLM,
         plan: dict[str, int] | None = None,
         classifier: IntentClassifier | None = None,
+        guardrails: Guardrails = DEFAULT_GUARDRAILS,
     ):
         self.store = store
         self.llm = llm
         self.plan = plan or RETRIEVAL_PLAN
-        self.classifier = classifier or IntentClassifier(llm)
+        self.guardrails = guardrails
+        self.classifier = classifier or IntentClassifier(llm, guardrails)
 
     def classify(self, question: str, database: str | None = None, progress: Progress | None = None) -> Intent:
         """Decide the question's intent before any SQL is written (see querymind.intent)."""
         progress = progress or Progress()
         progress.running("classify", "Working out what kind of question this is")
-        intent = IntentClassifier.refuse(question)  # prohibited requests stop before any lookup
+        intent = IntentClassifier.refuse(question, self.guardrails)  # prohibited requests stop before any lookup
         if intent is None:
             names = self.store.schema_names(database)
             intent = self.classifier.classify(question, names.tables, names.columns)
@@ -211,6 +213,8 @@ class QueryMindRAG:
         intent: Intent | None = None,
     ) -> SqlAnswer:
         sections = [*(extra_sections or []), *([intent_section(intent)] if intent else [])]
+        if guardrail_section := self.guardrails.prompt_section():
+            sections.append(guardrail_section)
         prompt = build_prompt(question, context, sections)
         system = UPDATE_INSTRUCTION if intent is not None and intent.is_update else SYSTEM_INSTRUCTION
         return self.llm.generate(system, prompt, SqlAnswer)
@@ -240,7 +244,9 @@ class QueryMindRAG:
         else:
             progress.done("generate-1", "The question can't be answered from the available data", answerable=False)
         answer, warnings = (
-            screen_update(answer, context) if intent.is_update else (answer, check_answer(answer, context))
+            screen_update(answer, context, self.guardrails)
+            if intent.is_update
+            else (answer, check_answer(answer, context, self.guardrails))
         )
         return RagAnswer(question, answer, context, self.llm.model_name, warnings, intent)
 
@@ -307,13 +313,15 @@ def refusal(intent: Intent) -> SqlAnswer:
     )
 
 
-def screen_update(answer: SqlAnswer, context: list[ContextItem]) -> tuple[SqlAnswer, list[str]]:
+def screen_update(
+    answer: SqlAnswer, context: list[ContextItem], guardrails: Guardrails = DEFAULT_GUARDRAILS
+) -> tuple[SqlAnswer, list[str]]:
     """Keep only acceptable UPDATE drafts; anything else (e.g. a DELETE) is removed, never returned."""
     warnings = []
     known_databases = {item.database for item in context}
     kept = []
     for query in answer.queries:
-        if reason := check_update(query.sql):
+        if reason := guardrails.check_update(query.sql):
             warnings.append(f"The drafted statement for {query.database} was withheld: {reason}.")
             continue
         if query.database not in known_databases:
@@ -325,11 +333,13 @@ def screen_update(answer: SqlAnswer, context: list[ContextItem]) -> tuple[SqlAns
     return screened, warnings
 
 
-def check_answer(answer: SqlAnswer, context: list[ContextItem]) -> list[str]:
+def check_answer(
+    answer: SqlAnswer, context: list[ContextItem], guardrails: Guardrails = DEFAULT_GUARDRAILS
+) -> list[str]:
     warnings = []
     known_databases = {item.database for item in context}
     for query in answer.queries:
-        if reason := check_read_only(query.sql):
+        if reason := guardrails.check_sql(query.sql):
             warnings.append(f"Query for {query.database} will not be executed: {reason}.")
         if query.database not in known_databases:
             warnings.append(f"Query targets unknown database '{query.database}'.")

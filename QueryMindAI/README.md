@@ -117,7 +117,7 @@ Everything else has sensible defaults and is documented in `.env.example`:
 | `LLM_MODEL` / `GEMINI_MODEL` / `OPENAI_MODEL` | `gemini-3.8-flash` / `gpt-6-luna` | Model per provider                                        |
 | `EMBEDDING_PROVIDER`                       | `gemini`                         | `fastembed` runs locally without a key                       |
 | `EMBEDDING_DIM`                            | `768`                            | Changing it requires re-indexing with `--recreate`           |
-| `QUERYMIND_MAX_ROWS`, `QUERYMIND_QUERY_TIMEOUT` | `1000`, `30` s              | Per query                                                    |
+| `QUERYMIND_MAX_ROWS`, `QUERYMIND_QUERY_TIMEOUT` | `1000`, `30` s              | Per query; the row limit only seeds the guardrail policy (§8) |
 | `QUERYMIND_CACHE_*`                        | on, 0.95, 3600 s                 | Semantic answer cache                                        |
 
 `.env` holds secrets: it is git-ignored, so never commit it. Real environment variables
@@ -135,7 +135,8 @@ uv run querymind index --dry-run         # parse sqls/ without calling any servi
 uv run querymind index                   # embed the docs and store them in Qdrant
 ```
 
-`index --dry-run` should list about 122 chunks for `ecommerce` and 68 for `returns_db`.
+`index --dry-run` should list about 122 chunks for `ecommerce`, 68 for `returns_db` and 32
+few-shot examples (`few_shot_examples.json`).
 Re-run `uv run querymind index` whenever the files in `sqls/` change (this also clears the
 answer cache).
 
@@ -202,7 +203,18 @@ business rules). Cassandra and DynamoDB sources can be documented but not querie
 - **Model Config**: switch between Gemini and OpenAI, set models and API keys (saved to
   `querymind-agentic/.env`, applied without a restart; keys are write-only), and test the connection.
 - **Okta SSO**: configure Okta OIDC settings and test the connection. Sign-in is **not enforced yet**.
-- **Guardrails**, **Logs**, **Schema**, **Overview**.
+- **Guardrails**: the policy every question and generated query is checked against, stored in
+  Qdrant (collection `querymind_guardrails`) and applied to new questions as soon as it is saved:
+  - *Question rules* (regular expressions) refuse a question before any SQL is written.
+  - *Blocked SQL keywords* stop generated SQL from running.
+  - *Restricted columns* (default `users.password_hash`) can't be used in SQL and are removed from results.
+  - The *row limit* per query.
+
+  The rules for deleting data, DDL, inserts and permissions, and the core write keywords (INSERT,
+  UPDATE, DELETE, DROP, ...), are locked: they can be reworded but not removed or disabled. If
+  Qdrant can't be read, the built-in policy applies. *Try it* checks a question or SQL against
+  unsaved changes. API: `GET/PUT /guardrails`, `POST /guardrails/reset`, `POST /guardrails/check`.
+- **Logs**, **Schema**, **Overview**.
 
 > The API has no authentication yet. Run it on your machine or a trusted network only.
 
@@ -215,6 +227,151 @@ cd querymind-agentic && uv run pytest && uv run ruff check
 cd querymind-api     && uv run pytest
 cd querymind-ui      && npm test && npm run lint && npm run typecheck
 ```
+
+## 10. Evaluate text-to-SQL accuracy
+
+The evaluation harness asks every test question through the real pipeline: intent, retrieval with
+few-shot examples, SQL generation, guardrails, read-only execution and self-repair. It then scores
+the answers against ground-truth SQL. Everything lives in `querymind-agentic`:
+
+| File | What it is |
+| --- | --- |
+| `sqls/few_shot_examples.json` | **Few-shot library**: 32 verified question → SQL pairs, labelled by query type, for both databases. Indexed into Qdrant; the SQL generator sees the most similar ones as examples. |
+| `evaluation/test_set.json` | **Test set**: 25 questions with ground-truth SQL (6 simple, 7 aggregate, 6 join, 6 temporal; 14 MySQL, 11 PostgreSQL) and 9 destructive **guardrail probes**. |
+| `evaluation/reports/<timestamp>/` | One folder per run: `report.md` (for people) and `results.json` (every case, for comparing runs). |
+| `src/querymind/evaluation/` | The harness: `dataset.py` (file formats), `compare.py` (metrics), `harness.py` (runner), `report.py` (report). |
+
+### 10.1 Run it
+
+Prerequisites: steps 1-4 done, so the databases are loaded, `.env` is set and the knowledge base
+is indexed.
+
+```bash
+cd querymind-agentic
+
+# 1. Index the few-shot library (first time, and after every change to it)
+uv run querymind index sqls/few_shot_examples.json
+
+# 2. Check the ground-truth and few-shot SQL on the live databases (no model calls, a few seconds)
+uv run querymind evaluate --validate-only
+
+# 3. Full evaluation (about 50 model calls, roughly 8-10 minutes with Gemini)
+uv run querymind evaluate
+```
+
+The run prints one line per case (`T05 SELECT_AGGREGATE PASS (semantic, 13.1 s)`), then the totals
+and the path of the report: `evaluation/reports/<timestamp>/report.md`.
+
+Options:
+
+| Option | Use |
+| --- | --- |
+| `--validate-only` | Run only the ground-truth and few-shot SQL. Exits with 1 if any statement fails, or if any ground truth returns no rows. |
+| `--ids T05 T13 G01` | Only these cases or probes, e.g. to re-check failures quickly. |
+| `--no-probes` | Skip the guardrail probes. |
+| `--max-repairs N` | Self-repair attempts per question (default 2, as in the app). |
+| `--output DIR` | Write the report somewhere else. |
+| `--test-set FILE`, `--few-shot FILE` | Use other files, e.g. a draft test set. |
+| `--llm-provider openai --llm-model ...` | Evaluate another model with the same test set. |
+
+### 10.2 Read the report
+
+- **Execution accuracy** (the main metric; the assignment's pass mark is 50%). The generated SQL
+  and the ground truth both run on the live databases, and the result sets are compared row by row.
+  Column names are ignored and columns may come in any order. Rows are compared as a set unless a
+  case sets `order_matters`. Numbers compare as numbers (5 = 5.00). Non-integral values match
+  within 0.5%, or when one is the other rounded (8.6477 = 8.6). *Relaxed* execution accuracy also
+  accepts extra columns.
+- **Exact match rate**: both statements are normalised by sqlglot (whitespace, keyword and
+  identifier case, quoting, trailing `;`) and compared as text.
+- **Semantic match**: an exact match, or `sqlglot.diff()` finds no edits after table and column
+  aliases are normalised. A final `ORDER BY` is ignored when the question asks for no order.
+- The report also has **per-query-type** and **per-database** breakdowns, intent-classification
+  accuracy, and **guardrails compliance**: the share of destructive probes that never ran.
+- **Execution misses** lists each failed case with the reason and both SQL statements.
+
+Model temperature is 0, but hosted models are not fully deterministic, so expect small differences
+between runs, mostly in exact match. Each report records its test-set and few-shot file hashes, the
+model, the embeddings and the guardrail policy version, so you can tell whether two runs are
+comparable.
+
+### 10.3 Add or change few-shot examples
+
+Edit `sqls/few_shot_examples.json`. Each pair:
+
+```json
+{
+  "id": "FS33",
+  "query_type": "SELECT_AGGREGATE",
+  "database": "ecommerce",
+  "dialect": "mysql",
+  "question": "How many orders did each customer place?",
+  "sql": "SELECT user_id, COUNT(*) AS orders FROM orders GROUP BY user_id;",
+  "notes": "Optional: the business rule this example teaches."
+}
+```
+
+Rules for a good example:
+
+- **IDs:** use a unique `id`.
+- **Query type:** `query_type` is one of `SELECT_SIMPLE`, `SELECT_AGGREGATE`, `SELECT_JOIN`,
+  `SELECT_TEMPORAL` or `UPDATE`.
+- **Base tables:** use tables, not the documented views; the views may not be installed.
+- **Business rules:** follow the rules in the schema files, e.g. sales exclude `pending` and
+  `cancelled` orders, and refunds count only when `status IN ('refunded','closed')`.
+- **Write statements:** only `UPDATE` examples may write, and they need a `WHERE` clause. They're
+  checked by the guardrails, never executed.
+- **No test questions:** never copy a test-set question into the library, or the evaluation
+  measures memory instead of skill. The unit tests check this.
+
+Then validate and re-index:
+
+```bash
+uv run querymind evaluate --validate-only            # every SELECT must run
+uv run querymind index sqls/few_shot_examples.json   # replaces this file's examples in Qdrant
+uv run pytest tests/evaluation                       # coverage and no-overlap checks
+```
+
+### 10.4 Add or change test cases
+
+Edit `evaluation/test_set.json`. Each case:
+
+```json
+{
+  "id": "T26",
+  "query_type": "SELECT_TEMPORAL",
+  "database": "returns_db",
+  "dialect": "postgresql",
+  "question": "How many returns were requested in August 2026?",
+  "ground_truth_sql": "SELECT count(*) FROM rma.returns WHERE requested_at >= '2026-08-01' AND requested_at < '2026-09-01';",
+  "order_matters": false,
+  "notes": "Optional"
+}
+```
+
+- **Fixed dates:** use them ("in August 2026", not "last month") so results don't change over
+  time.
+- **Unambiguous wording:** say which rows and columns you want, e.g. "excluding rejected returns",
+  "show the SKU and units", or "month as YYYY-MM". Otherwise a correct answer can fail on
+  presentation.
+- **Query type:** label `query_type` with the classifier's precedence. TEMPORAL beats AGGREGATE,
+  which beats JOIN, which beats SIMPLE.
+- **Row order:** set `order_matters: true` only when the question asks for an order and the ground
+  truth has no ties.
+- **Single database:** each case uses one database. Cross-database questions aren't scored yet.
+- **Guardrail probes:** add them under `guardrail_probes` as `{"id": "G10", "question": "..."}`.
+  Use `"expect": "drafted"` for change requests, which must be drafted and never executed.
+
+Then run `uv run querymind evaluate --validate-only`. Every ground truth must run and return rows.
+After that, run `uv run querymind evaluate` for a new report.
+
+### 10.5 Keep and compare results
+
+Reports are plain files, so you can commit the run you want to keep, e.g. the one for the
+assignment hand-in. Compare runs with `results.json`: `summary.overall`, `summary.by_query_type`,
+and the per-case `execution_match` / `exact_match` / `reason` fields. If you change the model, the
+few-shot library or the guardrails, rerun the full evaluation. The report header shows which inputs
+changed.
 
 ## Troubleshooting
 

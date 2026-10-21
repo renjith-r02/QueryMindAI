@@ -1,10 +1,10 @@
 import { SUGGESTIONS } from "@/mocks/catalog";
+import { getGuardrails } from "@/mocks/guardrails";
 import { interpret } from "@/mocks/interpret";
 import { TABLES } from "@/mocks/schema";
 import type { AskOptions } from "@/api/query";
 import type { ProgressStep } from "@/types/progress";
 import type { AskOutcome } from "@/types/query";
-import type { GuardSettings } from "@/types/settings";
 import type { SchemaTable } from "@/types/schema";
 
 /** Simulated time per step, so the mock shows the same live progress as the real API. */
@@ -25,14 +25,14 @@ function wait(ms: number, signal?: AbortSignal) {
 }
 
 /** Mirrors the progress events of querymind-api `POST /run/stream`. */
-export async function askQuestion(question: string, settings: GuardSettings, options: AskOptions = {}) {
+export async function askQuestion(question: string, options: AskOptions = {}) {
   const step = async (id: string, running: string, end: string, status: ProgressStep["status"] = "done") => {
     options.onProgress?.({ id, status: "running", message: running });
     await wait(STEP_MS, options.signal);
     options.onProgress?.({ id, status, message: end });
   };
 
-  const outcome = interpret(question, settings);
+  const outcome = interpret(question, await getGuardrails());
   if (outcome.kind === "blocked") {
     await step("guard", "Checking the question against guardrails", outcome.reason, "failed");
     return outcome;

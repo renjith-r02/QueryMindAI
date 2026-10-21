@@ -862,6 +862,124 @@
           }
         }
       }
+    },
+    "/guardrails": {
+      "get": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Get the guardrail policy",
+        "description": "The policy every question and generated query is checked against. The first call saves\nthe built-in policy (its row limit comes from QUERYMIND_MAX_ROWS).",
+        "operationId": "get_guardrails_guardrails_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardrailSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Replace the guardrail policy",
+        "description": "Applies to new questions straight away. Locked question rules can be reworded (and given\nmore patterns) but not removed or disabled, and the required SQL keywords stay blocked.",
+        "operationId": "update_guardrails_guardrails_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardrailPolicyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardrailSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid policy, or it would remove or disable part of the baseline"
+          }
+        }
+      }
+    },
+    "/guardrails/reset": {
+      "post": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Restore the built-in guardrail policy",
+        "operationId": "reset_guardrails_guardrails_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardrailSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/guardrails/check": {
+      "post": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Test a question or SQL against the policy",
+        "description": "Nothing is generated or run. `question` is checked against the question rules; `sql` is\nchecked the way generated SQL is before it runs (read-only, keywords, restricted columns).",
+        "operationId": "check_guardrails_guardrails_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardrailCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardrailCheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1367,6 +1485,198 @@
           "purpose"
         ],
         "title": "GeneratedQuery"
+      },
+      "GuardrailCheckRequest": {
+        "properties": {
+          "question": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "sql": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sql"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuardrailPolicyInput"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Check against this (unsaved) policy instead of the saved one"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GuardrailCheckRequest"
+      },
+      "GuardrailCheckResponse": {
+        "properties": {
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuestionCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sql": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SqlCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "GuardrailCheckResponse"
+      },
+      "GuardrailPolicyInput": {
+        "properties": {
+          "question_rules": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionRule"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Question Rules"
+          },
+          "blocked_sql_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Blocked Sql Keywords",
+            "description": "Keywords that stop generated SQL from running, e.g. DELETE, INTO OUTFILE"
+          },
+          "restricted_columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Restricted Columns",
+            "description": "Columns (column or table.column) generated SQL may not use; removed from results too"
+          },
+          "max_rows": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Max Rows",
+            "description": "Most rows fetched per query",
+            "default": 1000
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_rules",
+          "blocked_sql_keywords"
+        ],
+        "title": "GuardrailPolicyInput",
+        "description": "The editable policy."
+      },
+      "GuardrailSettings": {
+        "properties": {
+          "question_rules": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionRule"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Question Rules"
+          },
+          "blocked_sql_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Blocked Sql Keywords",
+            "description": "Keywords that stop generated SQL from running, e.g. DELETE, INTO OUTFILE"
+          },
+          "restricted_columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "title": "Restricted Columns",
+            "description": "Columns (column or table.column) generated SQL may not use; removed from results too"
+          },
+          "max_rows": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Max Rows",
+            "description": "Most rows fetched per query",
+            "default": 1000
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At",
+            "description": "Seconds since the epoch; 0 for the built-in defaults",
+            "default": 0
+          },
+          "required_sql_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Sql Keywords",
+            "description": "Always blocked; cannot be removed"
+          },
+          "locked_rule_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Locked Rule Ids",
+            "description": "Question rules that cannot be removed or disabled"
+          },
+          "polite_token": {
+            "type": "string",
+            "title": "Polite Token",
+            "description": "Placeholder in rule patterns for an optional polite lead-in"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "question_rules",
+          "blocked_sql_keywords",
+          "required_sql_keywords",
+          "locked_rule_ids",
+          "polite_token"
+        ],
+        "title": "GuardrailSettings",
+        "description": "The stored policy, plus the parts of the baseline that can't be removed."
       },
       "HTTPValidationError": {
         "properties": {
@@ -2167,6 +2477,95 @@
         ],
         "title": "QueryResultOut"
       },
+      "QuestionCheck": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "allowed"
+        ],
+        "title": "QuestionCheck"
+      },
+      "QuestionRule": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+            "title": "Id",
+            "description": "Stable identifier, e.g. delete-data"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Message",
+            "description": "Shown to the user when the rule refuses"
+          },
+          "patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Patterns",
+            "description": "Case-insensitive regular expressions; {polite} matches an optional polite lead-in"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked",
+            "description": "Part of the baseline; set by the server, cannot be disabled",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "message",
+          "patterns"
+        ],
+        "title": "QuestionRule",
+        "description": "Refuse a question when any pattern matches it (case-insensitive regular expressions)."
+      },
       "RunRequest": {
         "properties": {
           "question": {
@@ -2198,7 +2597,7 @@
               }
             ],
             "title": "Max Rows",
-            "description": "Rows fetched per query; cannot exceed the server limit"
+            "description": "Rows fetched per query; cannot exceed the guardrail row limit (GET /guardrails)"
           },
           "max_repairs": {
             "type": "integer",
@@ -2238,7 +2637,7 @@
               "generated"
             ],
             "title": "Status",
-            "description": "answered: SQL ran and was answered; generated: an UPDATE was drafted and NOT executed; blocked: refused by the intent classifier (DELETE, INSERT, DDL) before any SQL was written"
+            "description": "answered: SQL ran and was answered; generated: an UPDATE was drafted and NOT executed; blocked: refused by a guardrail question rule or the intent classifier before any SQL was written"
           },
           "model": {
             "type": "string",
@@ -2528,6 +2927,30 @@
           "sources"
         ],
         "title": "SqlAnswer"
+      },
+      "SqlCheck": {
+        "properties": {
+          "allowed": {
+            "type": "boolean",
+            "title": "Allowed"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "allowed"
+        ],
+        "title": "SqlCheck"
       },
       "ValidationError": {
         "properties": {

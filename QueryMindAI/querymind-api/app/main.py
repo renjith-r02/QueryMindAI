@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.errors import HANDLED, describe_error
-from app.routers import admin, datasources, knowledge, queries
+from app.routers import admin, datasources, guardrails, knowledge, queries
 
 
 class ServiceResponse(BaseModel):
@@ -48,6 +48,7 @@ app.include_router(knowledge.router)
 app.include_router(queries.router)
 app.include_router(admin.router)
 app.include_router(datasources.router)
+app.include_router(guardrails.router)
 
 
 # -- errors from the shared QueryMind service ----------------------------------------------

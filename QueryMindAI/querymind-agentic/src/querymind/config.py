@@ -31,11 +31,12 @@ class Settings:
     llm_provider: str = DEFAULT_LLM_PROVIDER
     llm_model: str | None = None  # None means the provider's default model
     llm_reasoning_effort: str | None = None  # OpenAI reasoning models only
-    max_rows: int = 1000
+    max_rows: int = 1000  # seeds the guardrail policy's row limit, which then applies
     cache_enabled: bool = True  # semantic cache of answers (see querymind.cache)
     cache_threshold: float = 0.95  # minimum cosine similarity to reuse an answer
     cache_ttl: int = 3600  # seconds an answer may be reused
     datasources_collection: str = "querymind_datasources"  # Qdrant collection holding data source settings
+    guardrails_collection: str = "querymind_guardrails"  # Qdrant collection holding the guardrail policy
     query_timeout: int = 30
     source_dir: Path = DEFAULT_SOURCE_DIR
 
@@ -62,6 +63,7 @@ class Settings:
             cache_threshold=float(os.getenv("QUERYMIND_CACHE_THRESHOLD") or cls.cache_threshold),
             cache_ttl=_int_env("QUERYMIND_CACHE_TTL") or cls.cache_ttl,
             datasources_collection=os.getenv("QUERYMIND_DATASOURCES_COLLECTION") or cls.datasources_collection,
+            guardrails_collection=os.getenv("QUERYMIND_GUARDRAILS_COLLECTION") or cls.guardrails_collection,
             query_timeout=_int_env("QUERYMIND_QUERY_TIMEOUT") or cls.query_timeout,
             source_dir=Path(os.getenv("QUERYMIND_SOURCE_DIR") or DEFAULT_SOURCE_DIR),
         )

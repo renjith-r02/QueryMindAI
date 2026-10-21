@@ -38,7 +38,10 @@ def test_index_rejects_paths_outside_source_dir(client):
 
 
 def test_search(client):
-    response = client.get("/search", params={"q": "refund amount paid", "limit": 3, "database": "returns_db"})
+    response = client.get(
+        "/search",
+        params={"q": "refund amount paid", "limit": 3, "database": "returns_db"},
+    )
     hits = response.json()
     assert response.status_code == 200
     assert len(hits) == 3
@@ -108,7 +111,10 @@ def test_server_defaults_to_gemini(monkeypatch):
     get_settings.cache_clear()
     try:
         settings = get_settings()
-        assert (settings.llm_provider, settings.resolved_llm_model) == ("gemini", "gemini-3.8-flash")
+        assert (settings.llm_provider, settings.resolved_llm_model) == (
+            "gemini",
+            "gemini-3.8-flash",
+        )
     finally:
         get_settings.cache_clear()
 
@@ -120,7 +126,10 @@ def test_run_returns_the_intent(client):
     assert body["intent"]["source"] == "model"
 
 
-@pytest.mark.parametrize("question", ["delete all orders", "drop table orders", "insert into orders values (1)"])
+@pytest.mark.parametrize(
+    "question",
+    ["delete all orders", "drop table orders", "insert into orders values (1)"],
+)
 def test_run_refuses_prohibited_requests(client, service, question):
     calls_before = service.llm.calls
     body = client.post("/run", json={"question": question}).json()

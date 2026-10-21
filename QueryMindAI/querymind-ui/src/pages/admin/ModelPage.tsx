@@ -94,8 +94,7 @@ export function ModelPage() {
         title="Model config"
         description={
           <>
-            The language model that writes SQL and answers, and the embedding model used for search. Saved to{" "}
-            <code className="font-mono text-xs">{config.config_file}</code> and used for new questions right away.
+            The language model that writes SQL and answers, and the embedding model used for search.
           </>
         }
       />

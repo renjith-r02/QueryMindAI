@@ -1,8 +1,8 @@
 """Deterministic checks that run before (and independently of) the language model.
 
-Prohibited requests (DELETE, INSERT, DDL, permissions) are refused here, so the decision
-never depends on a model. The heuristic classifier is the fallback when no model answer
-is available.
+Prohibited requests are refused here by the guardrail question rules (stored in Qdrant, see
+querymind.guardrails), so the decision never depends on a model. The heuristic classifier
+is the fallback when no model answer is available.
 """
 
 from __future__ import annotations
@@ -10,41 +10,11 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+from querymind.guardrails import DEFAULT_GUARDRAILS, POLITE, Guardrails
 from querymind.intent.models import Intent
 
-_POLITE = r"^\s*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|i\s+(?:want|need)\s+to\s+|let'?s\s+)?"
-
-# Each rule: (pattern, refusal message). Checked in order; the first match wins.
-_PROHIBITED: list[tuple[re.Pattern[str], str]] = [
-    (
-        re.compile(
-            rf"{_POLITE}(?:delete|remove|purge|wipe|erase|truncate|clear\s+out|get\s+rid\s+of)\b"
-            r"|\bdelete\s+(?:from|all|every|the|any|rows?|records?|them|it|those|these)\b|\btruncate\s+table\b"
-            r"|\b(?:and|then)\s+(?:then\s+)?(?:delete|remove|purge|wipe|erase|drop)\b",
-            re.I,
-        ),
-        "Deleting data is not allowed. QueryMind only reads data, and can draft UPDATE statements for review.",
-    ),
-    (
-        re.compile(
-            rf"{_POLITE}(?:drop|alter|create|rename)\s+(?:the\s+)?(?:table|view|index|column|schema|database)\b"
-            r"|\b(?:drop|alter)\s+(?:table|view|index|column|schema|database)\b",
-            re.I,
-        ),
-        "Changing the database structure (DDL) is not allowed.",
-    ),
-    (
-        re.compile(rf"{_POLITE}(?:insert|add\s+(?:a\s+)?new\s+(?:row|record))\b|\binsert\s+into\b", re.I),
-        "Adding rows (INSERT) is not allowed. QueryMind only reads data, and can draft UPDATE statements for review.",
-    ),
-    (
-        re.compile(rf"{_POLITE}(?:grant|revoke)\b|\b(?:grant|revoke)\s+\w+\s+(?:on|to|from)\b", re.I),
-        "Changing permissions is not allowed.",
-    ),
-]
-
 _UPDATE = re.compile(
-    rf"{_POLITE}(?:update|set|change|modify|edit|correct|fix|adjust|mark|increase|decrease|raise|lower|reduce"
+    rf"{POLITE}(?:update|set|change|modify|edit|correct|fix|adjust|mark|increase|decrease|raise|lower|reduce"
     r"|apply\s+a?\s*(?:discount|price))\b(?!\s+(?:in|over|across)\b)",
     re.I,
 )
@@ -64,12 +34,10 @@ _TEMPORAL = re.compile(
 )
 
 
-def prohibited(question: str) -> str | None:
-    """Refusal message when the question asks for a prohibited operation, else None."""
-    for pattern, message in _PROHIBITED:
-        if pattern.search(question):
-            return message
-    return None
+def prohibited(question: str, guardrails: Guardrails = DEFAULT_GUARDRAILS) -> str | None:
+    """Refusal message when a guardrail question rule refuses the question, else None."""
+    rule = guardrails.refuse(question)
+    return rule.message if rule else None
 
 
 def looks_like_update(question: str) -> bool:
@@ -87,9 +55,14 @@ def mentioned(question: str, vocabulary: Iterable[str]) -> list[str]:
     return found
 
 
-def classify_heuristically(question: str, tables: Iterable[str] = (), columns: Iterable[str] = ()) -> Intent:
+def classify_heuristically(
+    question: str,
+    tables: Iterable[str] = (),
+    columns: Iterable[str] = (),
+    guardrails: Guardrails = DEFAULT_GUARDRAILS,
+) -> Intent:
     """Keyword-based classification, used when the model is unavailable."""
-    if message := prohibited(question):
+    if message := prohibited(question, guardrails):
         return Intent("UNSUPPORTED", reason=message, source="rules", blocked_message=message)
     tables_found = mentioned(question, tables)
     columns_found = mentioned(question, columns)

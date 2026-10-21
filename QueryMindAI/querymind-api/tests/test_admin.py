@@ -12,8 +12,13 @@ from app.routers import admin
 
 MODEL = "/admin/model-config"
 OKTA = "/admin/okta"
-WATCHED = [*admin.MODEL_KEYS, "GOOGLE_API_KEY", *admin.OKTA_KEYS.values(), "OKTA_CLIENT_SECRET",
-           "QUERYMIND_OKTA_ALLOWED_HOSTS"]
+WATCHED = [
+    *admin.MODEL_KEYS,
+    "GOOGLE_API_KEY",
+    *admin.OKTA_KEYS.values(),
+    "OKTA_CLIENT_SECRET",
+    "QUERYMIND_OKTA_ALLOWED_HOSTS",
+]
 
 
 @pytest.fixture
@@ -25,7 +30,9 @@ def files(tmp_path, monkeypatch):
     monkeypatch.setattr("app.dependencies.load_dotenv", lambda *a, **k: None)
     monkeypatch.setattr("querymind.config.load_dotenv", lambda *a, **k: None)
     agent_env = tmp_path / "agent.env"
-    agent_env.write_text("# Agent settings\nGEMINI_API_KEY=old-gemini-key-1234\nLLM_MODEL=gemini-2.5-flash\nQDRANT_URL=http://q:6333\n")
+    agent_env.write_text(
+        "# Agent settings\nGEMINI_API_KEY=old-gemini-key-1234\nLLM_MODEL=gemini-2.5-flash\nQDRANT_URL=http://q:6333\n"
+    )
     paths = admin.ConfigFiles(agent=agent_env, api=tmp_path / "api.env")
     app.dependency_overrides[admin.get_config_files] = lambda: paths
     os.environ["GEMINI_API_KEY"] = "old-gemini-key-1234"
@@ -45,9 +52,15 @@ def api(files):
 
 
 def model_update(**overrides):
-    return {"llm_provider": "openai", "openai_model": "gpt-6-sol", "openai_reasoning_effort": "low",
-            "openai_api_key": "sk-test-abcdefgh9876", "gemini_model": "", "embedding_provider": "gemini",
-            **overrides}
+    return {
+        "llm_provider": "openai",
+        "openai_model": "gpt-6-sol",
+        "openai_reasoning_effort": "low",
+        "openai_api_key": "sk-test-abcdefgh9876",
+        "gemini_model": "",
+        "embedding_provider": "gemini",
+        **overrides,
+    }
 
 
 def test_read_model_config_masks_keys(api):
@@ -65,8 +78,12 @@ def test_update_model_config_writes_file_and_applies(api, files):
 
     assert body["llm_provider"] == "openai"
     assert body["active_model"] == "gpt-6-sol"
-    assert body["openai"] == {"model": "gpt-6-sol", "default_model": "gpt-6-luna", "reasoning_effort": "low",
-                              "api_key": "…9876"}
+    assert body["openai"] == {
+        "model": "gpt-6-sol",
+        "default_model": "gpt-6-luna",
+        "reasoning_effort": "low",
+        "api_key": "…9876",
+    }
     assert body["gemini"]["api_key"] == "…1234"  # omitted -> kept
 
     saved = read_env_file(files.agent)
@@ -105,7 +122,10 @@ def test_update_model_config_validation(api, change):
 def test_model_connection_test_reports_missing_key(api):
     api.put(MODEL, json=model_update(openai_api_key=""))
     body = api.post(f"{MODEL}/test").json()
-    assert body == {"ok": False, "message": "No API key is configured for OpenAI model gpt-6-sol."}
+    assert body == {
+        "ok": False,
+        "message": "No API key is configured for OpenAI model gpt-6-sol.",
+    }
 
 
 def test_model_connection_test_success(api, monkeypatch):
@@ -113,14 +133,24 @@ def test_model_connection_test_success(api, monkeypatch):
     fake = SimpleNamespace(client=SimpleNamespace(models=SimpleNamespace(retrieve=calls.append)))
     monkeypatch.setattr(admin, "create_llm", lambda provider, model: fake)
     api.put(MODEL, json=model_update())
-    assert api.post(f"{MODEL}/test").json() == {"ok": True, "message": "Connected. OpenAI model gpt-6-sol is available."}
+    assert api.post(f"{MODEL}/test").json() == {
+        "ok": True,
+        "message": "Connected. OpenAI model gpt-6-sol is available.",
+    }
     assert calls == ["gpt-6-sol"]
 
 
 def okta_update(**overrides):
-    return {"enabled": True, "org_url": "https://acme.okta.com/", "authorization_server_id": "default",
-            "client_id": "0oa1abc", "client_secret": "okta-secret-5678", "admin_group": "QueryMind Admins",
-            "redirect_uri": "http://localhost:8080/login/callback", **overrides}
+    return {
+        "enabled": True,
+        "org_url": "https://acme.okta.com/",
+        "authorization_server_id": "default",
+        "client_id": "0oa1abc",
+        "client_secret": "okta-secret-5678",
+        "admin_group": "QueryMind Admins",
+        "redirect_uri": "http://localhost:8080/login/callback",
+        **overrides,
+    }
 
 
 def test_okta_round_trip(api, files):
@@ -175,21 +205,31 @@ def test_okta_connection_test(api, monkeypatch):
 
     def fake_get(url, **kwargs):
         seen["url"], seen["redirects"] = url, kwargs["follow_redirects"]
-        return httpx.Response(200, json={
-            "issuer": "https://acme.okta.com/oauth2/default",
-            "authorization_endpoint": "https://acme.okta.com/oauth2/default/v1/authorize",
-            "token_endpoint": "https://acme.okta.com/oauth2/default/v1/token",
-            "jwks_uri": "https://acme.okta.com/oauth2/default/v1/keys",
-            "scopes_supported": ["openid", "profile", "groups"],
-        })
+        return httpx.Response(
+            200,
+            json={
+                "issuer": "https://acme.okta.com/oauth2/default",
+                "authorization_endpoint": "https://acme.okta.com/oauth2/default/v1/authorize",
+                "token_endpoint": "https://acme.okta.com/oauth2/default/v1/token",
+                "jwks_uri": "https://acme.okta.com/oauth2/default/v1/keys",
+                "scopes_supported": ["openid", "profile", "groups"],
+            },
+        )
 
     monkeypatch.setattr(admin.httpx, "get", fake_get)
     body = api.post(f"{OKTA}/test", json={"org_url": "https://acme.okta.com"}).json()
     assert body["ok"] is True
     assert body["token_endpoint"].endswith("/v1/token")
-    assert seen == {"url": "https://acme.okta.com/oauth2/default/.well-known/openid-configuration", "redirects": False}
+    assert seen == {
+        "url": "https://acme.okta.com/oauth2/default/.well-known/openid-configuration",
+        "redirects": False,
+    }
 
-    monkeypatch.setattr(admin.httpx, "get", lambda url, **kw: httpx.Response(200, json={"issuer": "https://evil"}))
+    monkeypatch.setattr(
+        admin.httpx,
+        "get",
+        lambda url, **kw: httpx.Response(200, json={"issuer": "https://evil"}),
+    )
     body = api.post(f"{OKTA}/test", json={"org_url": "https://acme.okta.com"}).json()
     assert body["ok"] is False and "Unexpected issuer" in body["message"]
 

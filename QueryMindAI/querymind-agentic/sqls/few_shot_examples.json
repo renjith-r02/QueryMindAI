@@ -1,0 +1,275 @@
+{
+  "description": "Curated few-shot library: verified question -> SQL pairs for both databases, labelled by query type. Indexed into Qdrant as qa_pair chunks and retrieved as 'similar questions' for the SQL generator. Every SQL is checked against the live databases by `querymind evaluate --validate-only`. Only base tables are used, so the pairs work even where the documented views are not installed.",
+  "pairs": [
+    {
+      "id": "FS01",
+      "query_type": "SELECT_SIMPLE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "List the active products of the brand Voltix with their SKU.",
+      "sql": "SELECT sku, name FROM products WHERE brand = 'Voltix' AND status = 'active' ORDER BY name;"
+    },
+    {
+      "id": "FS02",
+      "query_type": "SELECT_SIMPLE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Which customers have a blocked account?",
+      "sql": "SELECT user_id, first_name, last_name, email FROM users WHERE status = 'blocked';"
+    },
+    {
+      "id": "FS03",
+      "query_type": "SELECT_SIMPLE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "List the top-level product categories.",
+      "sql": "SELECT category_id, name FROM categories WHERE parent_id IS NULL ORDER BY name;",
+      "notes": "Top-level categories have parent_id NULL; subcategories point to their parent."
+    },
+    {
+      "id": "FS04",
+      "query_type": "SELECT_SIMPLE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Which products currently have a sale price, and what are the list and sale prices?",
+      "sql": "SELECT p.sku, p.name, pp.list_price, pp.sale_price FROM products p JOIN product_prices pp ON pp.product_id = p.product_id AND pp.effective_to IS NULL WHERE pp.sale_price IS NOT NULL ORDER BY p.name;",
+      "notes": "The current price row has effective_to IS NULL (business rule 2)."
+    },
+    {
+      "id": "FS05",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "How many sales orders came from each sales channel?",
+      "sql": "SELECT channel, COUNT(*) AS orders FROM orders WHERE status NOT IN ('pending', 'cancelled') GROUP BY channel ORDER BY orders DESC;",
+      "notes": "Sales exclude pending and cancelled orders (business rule 8)."
+    },
+    {
+      "id": "FS06",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "What is the average order value (amount paid) of sales orders?",
+      "sql": "SELECT ROUND(AVG(total_amount), 2) AS avg_order_value FROM orders WHERE status NOT IN ('pending', 'cancelled');",
+      "notes": "orders.total_amount is what the customer paid, including shipping and tax."
+    },
+    {
+      "id": "FS07",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Top 5 brands by gross revenue.",
+      "sql": "SELECT p.brand, SUM(ol.line_total) AS gross_revenue FROM order_lines ol JOIN orders o ON o.order_id = ol.order_id JOIN products p ON p.product_id = ol.product_id WHERE o.status NOT IN ('pending', 'cancelled') AND ol.status <> 'cancelled' GROUP BY p.brand ORDER BY gross_revenue DESC LIMIT 5;",
+      "notes": "Gross revenue = SUM(order_lines.line_total) over sales lines (rules 6 and 8)."
+    },
+    {
+      "id": "FS08",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "How many customer accounts are there in each status?",
+      "sql": "SELECT status, COUNT(*) AS users FROM users GROUP BY status ORDER BY users DESC;"
+    },
+    {
+      "id": "FS09",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "What percentage of sales orders used a coupon?",
+      "sql": "SELECT ROUND(100 * SUM(coupon_code IS NOT NULL) / COUNT(*), 1) AS pct_with_coupon FROM orders WHERE status NOT IN ('pending', 'cancelled');"
+    },
+    {
+      "id": "FS10",
+      "query_type": "SELECT_JOIN",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "List cancelled orders with the customer's name and email.",
+      "sql": "SELECT o.order_number, u.first_name, u.last_name, u.email FROM orders o JOIN users u ON u.user_id = o.user_id WHERE o.status = 'cancelled' ORDER BY o.placed_at;"
+    },
+    {
+      "id": "FS11",
+      "query_type": "SELECT_JOIN",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Which products belong to Footwear or one of its subcategories?",
+      "sql": "SELECT p.sku, p.name, c.name AS category FROM products p JOIN categories c ON c.category_id = p.category_id LEFT JOIN categories parent ON parent.category_id = c.parent_id WHERE c.name = 'Footwear' OR parent.name = 'Footwear' ORDER BY c.name, p.name;",
+      "notes": "Products sit in leaf categories; join the parent category to filter by a top-level category."
+    },
+    {
+      "id": "FS12",
+      "query_type": "SELECT_JOIN",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Show each product's current effective price together with its category name.",
+      "sql": "SELECT p.sku, p.name, c.name AS category, COALESCE(pp.sale_price, pp.list_price) AS effective_price FROM products p JOIN categories c ON c.category_id = p.category_id LEFT JOIN product_prices pp ON pp.product_id = p.product_id AND pp.effective_to IS NULL ORDER BY c.name, p.name;",
+      "notes": "Effective selling price = COALESCE(sale_price, list_price) of the current price row."
+    },
+    {
+      "id": "FS13",
+      "query_type": "SELECT_JOIN",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Which customers have never placed an order?",
+      "sql": "SELECT u.user_id, u.email FROM users u LEFT JOIN orders o ON o.user_id = u.user_id WHERE o.order_id IS NULL;"
+    },
+    {
+      "id": "FS14",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Gross revenue per quarter in 2025.",
+      "sql": "SELECT QUARTER(o.placed_at) AS quarter, SUM(ol.line_total) AS gross_revenue FROM order_lines ol JOIN orders o ON o.order_id = ol.order_id WHERE o.status NOT IN ('pending', 'cancelled') AND ol.status <> 'cancelled' AND o.placed_at >= '2025-01-01' AND o.placed_at < '2026-01-01' GROUP BY QUARTER(o.placed_at) ORDER BY quarter;",
+      "notes": "orders.placed_at is the sale date; use half-open date ranges."
+    },
+    {
+      "id": "FS15",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Which orders were placed in the last 30 days?",
+      "sql": "SELECT order_number, status, placed_at FROM orders WHERE placed_at >= NOW() - INTERVAL 30 DAY ORDER BY placed_at DESC;"
+    },
+    {
+      "id": "FS16",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Which orders took more than 7 days from payment to shipping?",
+      "sql": "SELECT order_number, paid_at, shipped_at, TIMESTAMPDIFF(DAY, paid_at, shipped_at) AS days_to_ship FROM orders WHERE paid_at IS NOT NULL AND shipped_at IS NOT NULL AND TIMESTAMPDIFF(DAY, paid_at, shipped_at) > 7 ORDER BY days_to_ship DESC;"
+    },
+    {
+      "id": "FS17",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "How many orders were delivered each month in 2026?",
+      "sql": "SELECT DATE_FORMAT(delivered_at, '%Y-%m') AS month, COUNT(*) AS delivered_orders FROM orders WHERE delivered_at >= '2026-01-01' AND delivered_at < '2027-01-01' GROUP BY DATE_FORMAT(delivered_at, '%Y-%m') ORDER BY month;"
+    },
+    {
+      "id": "FS18",
+      "query_type": "UPDATE",
+      "database": "ecommerce",
+      "dialect": "mysql",
+      "question": "Mark order ORD-2026-000110 as delivered.",
+      "sql": "UPDATE orders SET status = 'delivered', delivered_at = NOW() WHERE order_number = 'ORD-2026-000110' AND status = 'shipped';",
+      "notes": "Change requests are drafted for review and never executed. Always target rows with a WHERE clause."
+    },
+    {
+      "id": "FS19",
+      "query_type": "SELECT_SIMPLE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "List the returns that are still waiting for approval, oldest first.",
+      "sql": "SELECT rma_number, order_number, reason_code, requested_at FROM rma.returns WHERE status = 'requested' ORDER BY requested_at;"
+    },
+    {
+      "id": "FS20",
+      "query_type": "SELECT_SIMPLE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "Which returns were rejected, and for what reason?",
+      "sql": "SELECT rma_number, order_number, reason_code, customer_notes FROM rma.returns WHERE status = 'rejected';"
+    },
+    {
+      "id": "FS21",
+      "query_type": "SELECT_SIMPLE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "Show the returned items that were not put back into stock.",
+      "sql": "SELECT return_id, sku, product_name, quantity, item_condition FROM rma.return_lines WHERE NOT restock;"
+    },
+    {
+      "id": "FS22",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "How many returns are there per refund method?",
+      "sql": "SELECT refund_method, count(*) AS returns FROM rma.returns WHERE status <> 'rejected' GROUP BY refund_method ORDER BY returns DESC;",
+      "notes": "Rejected returns are excluded from return counts (business rule 1)."
+    },
+    {
+      "id": "FS23",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "How much money has been refunded per refund method?",
+      "sql": "SELECT refund_method, sum(refund_amount) AS refunded FROM rma.returns WHERE status IN ('refunded', 'closed') AND refunded_at IS NOT NULL GROUP BY refund_method ORDER BY refunded DESC;",
+      "notes": "A refund is paid only when status is refunded/closed and refunded_at is set (business rule 2)."
+    },
+    {
+      "id": "FS24",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "How many returns were seller-fault versus buyer-driven?",
+      "sql": "SELECT CASE WHEN reason_code IN ('damaged', 'wrong_item', 'not_as_described', 'late_delivery') THEN 'seller_fault' WHEN reason_code IN ('size_fit', 'changed_mind') THEN 'buyer_driven' ELSE 'unclassified' END AS fault, count(*) AS returns FROM rma.returns WHERE status <> 'rejected' GROUP BY 1 ORDER BY returns DESC;",
+      "notes": "Reason groups from business rule 6."
+    },
+    {
+      "id": "FS25",
+      "query_type": "SELECT_AGGREGATE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "What is the average restocking fee for each return reason?",
+      "sql": "SELECT reason_code, round(avg(restocking_fee), 2) AS avg_restocking_fee FROM rma.returns WHERE status <> 'rejected' GROUP BY reason_code ORDER BY avg_restocking_fee DESC;"
+    },
+    {
+      "id": "FS26",
+      "query_type": "SELECT_JOIN",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "For each return, list its RMA number with the SKUs and quantities returned.",
+      "sql": "SELECT r.rma_number, rl.sku, rl.quantity FROM rma.returns r JOIN rma.return_lines rl ON rl.return_id = r.return_id ORDER BY r.rma_number, rl.sku;"
+    },
+    {
+      "id": "FS27",
+      "query_type": "SELECT_JOIN",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "Show returned items in opened condition together with the return's reason and status.",
+      "sql": "SELECT r.rma_number, r.reason_code, r.status, rl.sku, rl.product_name FROM rma.return_lines rl JOIN rma.returns r ON r.return_id = rl.return_id WHERE rl.item_condition = 'opened';"
+    },
+    {
+      "id": "FS28",
+      "query_type": "SELECT_JOIN",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "List paid refunds with each returned product and its line refund amount.",
+      "sql": "SELECT r.rma_number, r.refunded_at, rl.product_name, rl.refund_amount FROM rma.returns r JOIN rma.return_lines rl ON rl.return_id = r.return_id WHERE r.status IN ('refunded', 'closed') AND r.refunded_at IS NOT NULL ORDER BY r.refunded_at;"
+    },
+    {
+      "id": "FS29",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "Which returns were refunded in the last 60 days?",
+      "sql": "SELECT rma_number, refund_amount, refunded_at FROM rma.returns WHERE status IN ('refunded', 'closed') AND refunded_at >= now() - interval '60 days' ORDER BY refunded_at DESC;"
+    },
+    {
+      "id": "FS30",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "What is the average number of days from a return request to its approval?",
+      "sql": "SELECT round(avg(extract(epoch FROM approved_at - requested_at) / 86400)::numeric, 1) AS avg_days_to_approve FROM rma.returns WHERE approved_at IS NOT NULL;"
+    },
+    {
+      "id": "FS31",
+      "query_type": "SELECT_TEMPORAL",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "How many returns were requested in each month of 2025?",
+      "sql": "SELECT to_char(requested_at, 'YYYY-MM') AS month, count(*) AS returns FROM rma.returns WHERE status <> 'rejected' AND requested_at >= '2025-01-01' AND requested_at < '2026-01-01' GROUP BY 1 ORDER BY 1;",
+      "notes": "requested_at is the date for 'returns per period' (business rule 8)."
+    },
+    {
+      "id": "FS32",
+      "query_type": "UPDATE",
+      "database": "returns_db",
+      "dialect": "postgresql",
+      "question": "Approve return RMA-2026-000013.",
+      "sql": "UPDATE rma.returns SET status = 'approved', approved_at = now(), updated_at = now() WHERE rma_number = 'RMA-2026-000013' AND status = 'requested';",
+      "notes": "Change requests are drafted for review and never executed. Always target rows with a WHERE clause."
+    }
+  ]
+}

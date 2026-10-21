@@ -1,32 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ClaudeCodeEditorTabs">
-    <option name="activeSessionId" value="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" />
+    <option name="activeSessionId" value="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" />
     <option name="openSessionIds">
       <list>
-        <option value="5016c226-898d-40ad-a4b4-709d9c4aea84" />
-        <option value="a5243e06-b5df-492d-82ee-3588a729521a" />
-        <option value="f60b7953-18ab-43ba-b76d-0e91d8691aaa" />
-        <option value="9414a437-b866-4f23-b086-05b5b38d7942" />
-        <option value="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" />
+        <option value="ca2eede8-e7b0-4edc-bed5-691dee237b5c" />
+        <option value="77e40cf7-1acb-4bbe-9aa7-f1f6bc35a44c" />
+        <option value="50a34a17-99fa-49df-8cf3-56a858bdf529" />
+        <option value="d35b124b-2d58-4b0d-a427-fe8fc3f453fe" />
+        <option value="7ab0dcfc-8060-46e3-96d9-1456cf95cc26" />
+        <option value="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" />
       </list>
     </option>
     <option name="sessionPaths">
       <map>
-        <entry key="5016c226-898d-40ad-a4b4-709d9c4aea84" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
-        <entry key="9414a437-b866-4f23-b086-05b5b38d7942" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
-        <entry key="a5243e06-b5df-492d-82ee-3588a729521a" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
-        <entry key="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
-        <entry key="f60b7953-18ab-43ba-b76d-0e91d8691aaa" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
+        <entry key="50a34a17-99fa-49df-8cf3-56a858bdf529" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
+        <entry key="77e40cf7-1acb-4bbe-9aa7-f1f6bc35a44c" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
+        <entry key="7ab0dcfc-8060-46e3-96d9-1456cf95cc26" value="/sessions/new" />
+        <entry key="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
+        <entry key="ca2eede8-e7b0-4edc-bed5-691dee237b5c" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
+        <entry key="d35b124b-2d58-4b0d-a427-fe8fc3f453fe" value="/sessions/new" />
       </map>
     </option>
     <option name="sessionTitles">
       <map>
-        <entry key="5016c226-898d-40ad-a4b4-709d9c4aea84" value="analyze querymind-ui and share how structure can b" />
-        <entry key="9414a437-b866-4f23-b086-05b5b38d7942" value="analyze querymind-ui and share how structure can b" />
-        <entry key="a5243e06-b5df-492d-82ee-3588a729521a" value="analyze querymind-ui and share how structure can b" />
-        <entry key="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" value="analyze querymind-ui and share how structure can b" />
-        <entry key="f60b7953-18ab-43ba-b76d-0e91d8691aaa" value="analyze querymind-ui and share how structure can b" />
+        <entry key="50a34a17-99fa-49df-8cf3-56a858bdf529" value="analyze querymind-ui and share how structure can b" />
+        <entry key="77e40cf7-1acb-4bbe-9aa7-f1f6bc35a44c" value="analyze querymind-ui and share how structure can b" />
+        <entry key="7ab0dcfc-8060-46e3-96d9-1456cf95cc26" value="Claude Code" />
+        <entry key="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" value="analyze querymind-ui and share how structure can b" />
+        <entry key="ca2eede8-e7b0-4edc-bed5-691dee237b5c" value="analyze querymind-ui and share how structure can b" />
+        <entry key="d35b124b-2d58-4b0d-a427-fe8fc3f453fe" value="Claude Code" />
       </map>
     </option>
   </component>

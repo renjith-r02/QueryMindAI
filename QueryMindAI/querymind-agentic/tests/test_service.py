@@ -33,7 +33,11 @@ def index(service, **kwargs):
 
 def test_dry_run_parses_without_writing(service):
     report = index(service, dry_run=True)
-    assert [s.name for s in report.sources] == ["ecommerce_mysql_schema.sql", "returns_postgres_schema.sql"]
+    assert [s.name for s in report.sources] == [
+        "ecommerce_mysql_schema.sql",
+        "few_shot_examples.json",
+        "returns_postgres_schema.sql",
+    ]
     assert report.indexed == 0
     assert report.sources[0].counts["table"] > 0
     assert service._store is None  # Qdrant was never touched

@@ -40,7 +40,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 # Okta-hosted domains the connection test may call. Add a custom Okta domain with
 # QUERYMIND_OKTA_ALLOWED_HOSTS=login.example.com (comma-separated).
-OKTA_DOMAINS = ("okta.com", "oktapreview.com", "okta-emea.com", "okta-gov.com", "okta.mil")
+OKTA_DOMAINS = (
+    "okta.com",
+    "oktapreview.com",
+    "okta-emea.com",
+    "okta-gov.com",
+    "okta.mil",
+)
 
 
 @dataclass(frozen=True)
@@ -71,8 +77,16 @@ def _shell_warning(keys: list[str]) -> list[str]:
 # -- model configuration -------------------------------------------------------------------
 
 MODEL_KEYS = [
-    "LLM_PROVIDER", "LLM_MODEL", "OPENAI_MODEL", "GEMINI_MODEL", "LLM_REASONING_EFFORT",
-    "OPENAI_API_KEY", "GEMINI_API_KEY", "EMBEDDING_PROVIDER", "EMBEDDING_MODEL", "EMBEDDING_DIM",
+    "LLM_PROVIDER",
+    "LLM_MODEL",
+    "OPENAI_MODEL",
+    "GEMINI_MODEL",
+    "LLM_REASONING_EFFORT",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "EMBEDDING_PROVIDER",
+    "EMBEDDING_MODEL",
+    "EMBEDDING_DIM",
 ]
 
 
@@ -115,7 +129,11 @@ def read_model_config(files: Files) -> ModelConfig:
     return _model_config(files)
 
 
-@router.put("/model-config", response_model=ModelConfig, summary="Update the model configuration")
+@router.put(
+    "/model-config",
+    response_model=ModelConfig,
+    summary="Update the model configuration",
+)
 def update_model_config(body: ModelConfigUpdate, files: Files) -> ModelConfig:
     """Save to querymind-agentic/.env and apply immediately (new requests use the new model)."""
     before = get_settings()
@@ -129,7 +147,10 @@ def update_model_config(body: ModelConfigUpdate, files: Files) -> ModelConfig:
         "EMBEDDING_MODEL": body.embedding_model or None,
         "EMBEDDING_DIM": str(body.embedding_dimensions) if body.embedding_dimensions else None,
     }
-    for key, value in (("OPENAI_API_KEY", body.openai_api_key), ("GEMINI_API_KEY", body.gemini_api_key)):
+    for key, value in (
+        ("OPENAI_API_KEY", body.openai_api_key),
+        ("GEMINI_API_KEY", body.gemini_api_key),
+    ):
         if value is not None:  # None keeps the current key
             changes[key] = value or None
     update_env_file(files.agent, changes)
@@ -137,14 +158,20 @@ def update_model_config(body: ModelConfigUpdate, files: Files) -> ModelConfig:
 
     after = get_settings()
     warnings = []
-    if (before.embedding_provider, before.embedding_model, before.embedding_dimensions) != (
-        after.embedding_provider, after.embedding_model, after.embedding_dimensions
-    ):
+    if (
+        before.embedding_provider,
+        before.embedding_model,
+        before.embedding_dimensions,
+    ) != (after.embedding_provider, after.embedding_model, after.embedding_dimensions):
         warnings.append("The embedding model changed: re-index with POST /index and recreate=true before asking.")
     return _model_config(files, warnings)
 
 
-@router.post("/model-config/test", response_model=ConnectionTest, summary="Test the language model")
+@router.post(
+    "/model-config/test",
+    response_model=ConnectionTest,
+    summary="Test the language model",
+)
 def test_model_config() -> ConnectionTest:
     """Check that the saved API key works and the configured model exists. Uses no tokens."""
     settings = get_settings()
@@ -259,11 +286,22 @@ def test_okta(body: OktaTestRequest) -> OktaTestResult:
     issuer = issuer_url(body.org_url, body.authorization_server_id)
     url = f"{issuer}/.well-known/openid-configuration"
     try:
-        response = httpx.get(url, timeout=5.0, follow_redirects=False, headers={"Accept": "application/json"})
+        response = httpx.get(
+            url,
+            timeout=5.0,
+            follow_redirects=False,
+            headers={"Accept": "application/json"},
+        )
     except httpx.HTTPError as error:
-        return OktaTestResult(ok=False, message=f"Could not reach Okta at {body.org_url} ({type(error).__name__}).")
+        return OktaTestResult(
+            ok=False,
+            message=f"Could not reach Okta at {body.org_url} ({type(error).__name__}).",
+        )
     if response.status_code == 404:
-        return OktaTestResult(ok=False, message="Okta answered, but the authorization server was not found.")
+        return OktaTestResult(
+            ok=False,
+            message="Okta answered, but the authorization server was not found.",
+        )
     if response.status_code != 200:
         return OktaTestResult(ok=False, message=f"Okta answered with HTTP {response.status_code}.")
     try:
@@ -271,7 +309,10 @@ def test_okta(body: OktaTestRequest) -> OktaTestResult:
     except ValueError:
         return OktaTestResult(ok=False, message="Okta did not return an OpenID configuration document.")
     if document.get("issuer") != issuer:
-        return OktaTestResult(ok=False, message=f"Unexpected issuer {document.get('issuer')!r}; expected {issuer}.")
+        return OktaTestResult(
+            ok=False,
+            message=f"Unexpected issuer {document.get('issuer')!r}; expected {issuer}.",
+        )
     return OktaTestResult(
         ok=True,
         message=f"Connected to the authorization server at {issuer}.",

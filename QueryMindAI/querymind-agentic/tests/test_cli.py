@@ -31,6 +31,7 @@ def test_cli_llm_flags():
 
 def test_cli_refuses_delete_without_any_service_call(capsys, monkeypatch):
     # The rule check runs before the knowledge store or a model is touched.
+    monkeypatch.setenv("QDRANT_URL", ":memory:")  # the guardrail policy is read from Qdrant
     monkeypatch.setattr("querymind.service.QueryMindService.store", property(lambda self: _no_store()))
     assert cli.main(["run", "delete every cancelled order"]) == 1
     out = capsys.readouterr().out

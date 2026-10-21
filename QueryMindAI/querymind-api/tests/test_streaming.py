@@ -75,7 +75,10 @@ def test_stream_reports_service_errors_as_events(client, service, monkeypatch):
     assert events[0][0] == "progress"
     assert events[-1] == (
         "error",
-        {"status": 503, "detail": "The model provider's API key is not configured on the server."},
+        {
+            "status": 503,
+            "detail": "The model provider's API key is not configured on the server.",
+        },
     )
 
 
@@ -112,7 +115,6 @@ async def test_disconnect_cancels_the_work():
 
     assert stopped.wait(timeout=2), "the worker kept running after the client left"
     assert len(reached) < 100
-
 
 
 def test_run_stream_refuses_delete(client):

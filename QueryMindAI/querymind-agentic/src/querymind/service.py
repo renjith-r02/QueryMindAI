@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,7 @@ from querymind.database.executor import DatabaseRegistry
 from querymind.datasources import DataSource, DataSourceInput, DataSourceRepository, from_schema_file
 from querymind.datasources.connections import connection_from_url, env_database_urls, resolve
 from querymind.exceptions import NoSourceFilesError
+from querymind.guardrails import GuardrailRepository, Guardrails, default_policy
 from querymind.ingest.models import Chunk
 from querymind.ingest.qa_loader import load_qa_file
 from querymind.ingest.sql_parser import parse_sql_file
@@ -38,6 +40,7 @@ from querymind.llm.providers import LLM, create_llm
 from querymind.progress import ProgressCallback
 
 SOURCE_SUFFIXES = {".sql", ".json"}
+GUARDRAILS_TTL = 10.0  # seconds a loaded guardrail policy is reused before Qdrant is read again
 logger = logging.getLogger(__name__)
 
 
@@ -90,6 +93,9 @@ class QueryMindService:
         self._store: KnowledgeStore | None = None
         self._cache: SemanticCache | None = None
         self._datasources: DataSourceRepository | None = None
+        self._guardrail_store: GuardrailRepository | None = None
+        self._guardrails: tuple[float, Guardrails] | None = None
+        self._records: QdrantClient | None = None
         self._lock = threading.Lock()
 
     # -- shared clients, created on first use ------------------------------------------
@@ -181,18 +187,56 @@ class QueryMindService:
         with self._lock:
             if self._datasources is None:
                 s = self.settings
-                client = (
-                    self._store.client
-                    if self._store is not None
-                    else QdrantClient(location=s.qdrant_url, api_key=s.qdrant_api_key)
-                )
                 self._datasources = DataSourceRepository(
-                    client,
+                    self._records_client(),
                     s.datasources_collection,
                     seed=self._seed_datasources,
                     on_change=self._datasources_changed,
                 )
             return self._datasources
+
+    def _records_client(self) -> QdrantClient:
+        """Qdrant client for settings records (no embedding model or API key needed). Call with the lock held."""
+        if self._records is None:
+            s = self.settings
+            self._records = (
+                self._store.client
+                if self._store is not None
+                else QdrantClient(location=s.qdrant_url, api_key=s.qdrant_api_key)
+            )
+        return self._records
+
+    @property
+    def guardrail_store(self) -> GuardrailRepository:
+        """The guardrail policy in Qdrant, saved from the built-in defaults on first use."""
+        with self._lock:
+            if self._guardrail_store is None:
+                s = self.settings
+                self._guardrail_store = GuardrailRepository(
+                    self._records_client(),
+                    s.guardrails_collection,
+                    default=lambda: default_policy(s.max_rows),
+                    on_change=self._guardrails_changed,
+                )
+            return self._guardrail_store
+
+    def guardrails(self) -> Guardrails:
+        """The current guardrail policy, re-read from Qdrant at most every GUARDRAILS_TTL seconds.
+
+        If Qdrant can't be read, the built-in policy applies, so the checks never get weaker."""
+        cached = self._guardrails
+        if cached is not None and time.monotonic() - cached[0] < GUARDRAILS_TTL:
+            return cached[1]
+        try:
+            guardrails = Guardrails(self.guardrail_store.get())
+        except Exception as error:  # noqa: BLE001 - questions must still be checked
+            logger.warning("Could not read the guardrail policy; using the built-in policy: %s", error)
+            guardrails = Guardrails.defaults(self.settings.max_rows)
+        self._guardrails = (time.monotonic(), guardrails)
+        return guardrails
+
+    def _guardrails_changed(self) -> None:
+        self._guardrails = None
 
     def _seed_datasources(self) -> list[DataSourceInput]:
         """The data sources documented by the schema files, for the first use of the collection.
@@ -225,12 +269,13 @@ class QueryMindService:
                 )
             return self._cache
 
-    def cache_scope(self, max_rows: int) -> str:
+    def cache_scope(self, max_rows: int, guardrails: Guardrails | None = None) -> str:
         """Everything besides the question that changes an answer; cache entries match only within it."""
         s = self.settings
         return (
             f"llm={s.llm_provider}:{s.resolved_llm_model}|emb={s.embedding_provider}:{self.store.embedder.model_name}"
             f":{s.embedding_dimensions or 'default'}|kb={s.collection}|rows={max_rows}"
+            f"|guard={(guardrails or self.guardrails()).version}"
         )
 
     def cache_stats(self) -> CacheStats:
@@ -305,9 +350,10 @@ class QueryMindService:
 
     def ask(self, question: str, database: str | None = None, on_progress: ProgressCallback | None = None) -> RagAnswer:
         """Retrieve context and generate SQL, without running it."""
-        if refused := IntentClassifier.refuse(question):
+        guardrails = self.guardrails()
+        if refused := IntentClassifier.refuse(question, guardrails):
             return refused_answer(question, refused, self.settings.resolved_llm_model, on_progress)
-        return self.rag().answer(question, database=database, on_progress=on_progress)
+        return self.rag(guardrails).answer(question, database=database, on_progress=on_progress)
 
     def run(
         self,
@@ -324,26 +370,29 @@ class QueryMindService:
         `on_progress` receives a ProgressEvent at each step; raising from it cancels the run.
         A recent near-identical question is answered from the semantic cache without LLM calls,
         unless `use_cache` is False (the fresh answer then replaces the cached one).
-        Prohibited requests (DELETE, INSERT, DDL) are refused here, before any client is created.
+        Requests refused by the guardrail question rules (DELETE, INSERT, DDL, ...) stop here,
+        before the knowledge store, a model or a database is used. `max_rows` can lower the
+        guardrail row limit, never raise it.
         """
-        if refused := IntentClassifier.refuse(question):
+        guardrails = self.guardrails()
+        if refused := IntentClassifier.refuse(question, guardrails):
             return refused_result(question, refused, self.settings.resolved_llm_model, on_progress)
-        databases = self.databases
-        if max_rows is not None or timeout_seconds is not None:
-            databases = databases.with_limits(
-                max_rows or databases.max_rows, timeout_seconds or self.settings.query_timeout
-            )
+        databases = self.databases.with_limits(
+            min(max_rows or guardrails.max_rows, guardrails.max_rows),
+            timeout_seconds or self.settings.query_timeout,
+            guardrails,
+        )
         agent = QueryMindAgent(
-            self.rag(),
+            self.rag(guardrails),
             databases,
             max_repairs=max_repairs,
             cache=self.cache,
-            cache_scope=self.cache_scope(databases.max_rows),
+            cache_scope=self.cache_scope(databases.max_rows, guardrails),
         )
         return agent.run(question, database=database, on_progress=on_progress, use_cache=use_cache)
 
-    def rag(self) -> QueryMindRAG:
-        return QueryMindRAG(self.store, self.llm)
+    def rag(self, guardrails: Guardrails | None = None) -> QueryMindRAG:
+        return QueryMindRAG(self.store, self.llm, guardrails=guardrails or self.guardrails())
 
 
 def _load(path: Path, database: str | None, dialect: str | None) -> list[Chunk]:

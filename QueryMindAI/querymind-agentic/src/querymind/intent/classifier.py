@@ -1,6 +1,7 @@
 """Semantic intent classifier: decides what kind of request a question is before any SQL is written.
 
-1. Rules refuse prohibited requests (DELETE, INSERT, DDL, permissions) without calling a model.
+1. Guardrail question rules (stored in Qdrant) refuse prohibited requests (DELETE, INSERT, DDL,
+   permissions, ...) without calling a model.
 2. The language model classifies the question against the schema vocabulary
    (structured output: query_type, traits, tables_mentioned, columns_mentioned).
 3. Mentioned names are kept only if they exist in the schema, and the stricter of the
@@ -13,6 +14,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 
+from querymind.guardrails import DEFAULT_GUARDRAILS, Guardrails
 from querymind.intent import rules
 from querymind.intent.models import DESCRIPTIONS, Intent, IntentClassification
 from querymind.llm.providers import LLM
@@ -41,32 +43,33 @@ Rules:
 
 
 class IntentClassifier:
-    def __init__(self, llm: LLM | None):
+    def __init__(self, llm: LLM | None, guardrails: Guardrails = DEFAULT_GUARDRAILS):
         self.llm = llm
+        self.guardrails = guardrails
 
     @staticmethod
-    def refuse(question: str) -> Intent | None:
-        """The rules-only check: an UNSUPPORTED intent for a prohibited request, else None.
+    def refuse(question: str, guardrails: Guardrails = DEFAULT_GUARDRAILS) -> Intent | None:
+        """The rules-only check: an UNSUPPORTED intent when a guardrail question rule refuses, else None.
 
-        Needs no model, schema or connection, so callers run it before anything else.
+        Needs no model, schema or database connection, so callers run it before anything else.
         """
-        if message := rules.prohibited(question):
+        if message := rules.prohibited(question, guardrails):
             return Intent("UNSUPPORTED", reason=message, source="rules", blocked_message=message)
         return None
 
     def classify(self, question: str, tables: Iterable[str] = (), columns: Iterable[str] = ()) -> Intent:
         tables, columns = sorted(set(tables)), sorted(set(columns))
 
-        if refused := self.refuse(question):
+        if refused := self.refuse(question, self.guardrails):
             return refused
         if self.llm is None:
-            return rules.classify_heuristically(question, tables, columns)
+            return rules.classify_heuristically(question, tables, columns, self.guardrails)
 
         try:
             answer = self.llm.generate(self._system(), self._prompt(question, tables, columns), IntentClassification)
         except Exception as error:  # noqa: BLE001 - classification must not stop the question
             logger.warning("Intent classification by the model failed; using keyword rules: %s", error)
-            intent = rules.classify_heuristically(question, tables, columns)
+            intent = rules.classify_heuristically(question, tables, columns, self.guardrails)
             intent.source = "rules-fallback"
             return intent
 

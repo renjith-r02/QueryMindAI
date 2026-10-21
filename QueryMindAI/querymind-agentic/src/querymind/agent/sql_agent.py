@@ -167,11 +167,14 @@ class QueryMindAgent:
         database: str | None = None,
         on_progress: ProgressCallback | None = None,
         use_cache: bool = True,
+        summarize: bool = True,
     ) -> AgentResult:
         """Answer the question. With a cache, a recent near-identical question is answered from it
-        without any LLM call; `use_cache=False` skips the lookup (the fresh answer is still stored)."""
+        without any LLM call; `use_cache=False` skips the lookup (the fresh answer is still stored).
+        `summarize=False` stops once the result table is ready, without the final written answer
+        (used by the evaluation harness); such results are not cached."""
         progress = Progress(on_progress)
-        if refused := IntentClassifier.refuse(question):  # free, and never cached
+        if refused := IntentClassifier.refuse(question, self.rag.guardrails):  # free, and never cached
             return refused_result(question, refused, self.rag.llm.model_name, on_progress)
 
         vector = None
@@ -181,8 +184,8 @@ class QueryMindAgent:
             if use_cache and (hit := self._from_cache(vector, question, scope, progress)) is not None:
                 return hit
 
-        result = self._run(question, database, progress, vector)
-        if self.cache is not None and vector is not None and result.status in CACHEABLE_STATUSES:
+        result = self._run(question, database, progress, vector, summarize)
+        if summarize and self.cache is not None and vector is not None and result.status in CACHEABLE_STATUSES:
             self.cache.store(vector, question, scope, result.to_dict())
         return result
 
@@ -202,7 +205,14 @@ class QueryMindAgent:
         )
         return result
 
-    def _run(self, question: str, database: str | None, progress: Progress, vector: list[float] | None) -> AgentResult:
+    def _run(
+        self,
+        question: str,
+        database: str | None,
+        progress: Progress,
+        vector: list[float] | None,
+        summarize: bool = True,
+    ) -> AgentResult:
         intent = self.rag.classify(question, database, progress)
         result = AgentResult(question, "failed", [], [], model=self.rag.llm.model_name, intent=intent)
         if intent.blocked:  # never reaches retrieval or the SQL generator
@@ -229,7 +239,7 @@ class QueryMindAgent:
                 model=self.rag.llm.model_name,
             )
             plan = self.rag.generate(question, context, [live_schema, *feedback], intent)
-            result.warnings = check_answer(plan, context)
+            result.warnings = check_answer(plan, context, self.rag.guardrails)
             if not plan.answerable or not plan.queries:
                 progress.done(step, "The question can't be answered from the available data", answerable=False)
                 result.attempts.append(Attempt(plan, []))
@@ -253,6 +263,9 @@ class QueryMindAgent:
         else:
             return result
 
+        if not summarize:
+            result.status = "answered"
+            return result
         progress.running("answer", "Writing the answer from the results")
         result.final = self.rag.llm.generate(FINAL_SYSTEM_INSTRUCTION, self._final_prompt(result), FinalAnswer)
         result.status = "answered"
@@ -263,7 +276,7 @@ class QueryMindAgent:
         """Draft an UPDATE for review. It is screened and returned, never executed."""
         progress.running("generate-1", "Drafting the UPDATE statement", attempt=1, model=self.rag.llm.model_name)
         plan = self.rag.generate(result.question, result.context, [live_schema], result.intent)
-        plan, result.warnings = screen_update(plan, result.context)
+        plan, result.warnings = screen_update(plan, result.context, self.rag.guardrails)
         result.attempts.append(Attempt(plan, []))
         if not plan.answerable or not plan.queries:
             message = result.warnings[0] if result.warnings else "The change can't be drafted from the available data"
@@ -307,7 +320,7 @@ class QueryMindAgent:
             step = f"merge-{number}"
             progress.running(step, f"Combining the results of {len(results)} queries")
             if plan.merge_sql:
-                attempt.merged = merge_results(results, plan.merge_sql)
+                attempt.merged = merge_results(results, plan.merge_sql, self.databases.guardrails)
             else:
                 attempt.merged = QueryResult(
                     "merge",

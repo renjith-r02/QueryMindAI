@@ -6,12 +6,4 @@ export type Settings = {
   primaryDialect: Dialect;
   secondaryDialect: Dialect;
   multiDialect: boolean;
-  maxRows: number;
-  selectOnly: boolean;
-  blockDestructive: boolean;
-  domainRules: boolean;
-  rateLimit: boolean;
 };
-
-/** The subset of settings the backend needs to apply guardrails. */
-export type GuardSettings = Pick<Settings, "selectOnly" | "blockDestructive" | "domainRules" | "maxRows">;

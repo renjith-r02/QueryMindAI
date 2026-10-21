@@ -4,7 +4,6 @@ import { readEventStream } from "@/api/sse";
 import { env } from "@/config/env";
 import type { ProgressStep } from "@/types/progress";
 import type { AskOutcome } from "@/types/query";
-import type { GuardSettings } from "@/types/settings";
 
 export type AskOptions = {
   /** Called for every progress event while the question is being answered. */
@@ -14,16 +13,13 @@ export type AskOptions = {
   useCache?: boolean;
 };
 
-export async function askQuestion(
-  question: string,
-  settings: GuardSettings,
-  options: AskOptions = {},
-): Promise<AskOutcome> {
+export async function askQuestion(question: string, options: AskOptions = {}): Promise<AskOutcome> {
   if (env.useMocks) {
     const mocks = await import("@/mocks/handlers");
-    return mocks.askQuestion(question, settings, options);
+    return mocks.askQuestion(question, options);
   }
-  // Guardrails, model and row limits are configured on the server, so only the question is sent.
+  // Guardrails (stored in Qdrant, see /guardrails), model and row limits are applied by the server,
+  // so only the question is sent.
   const response = await apiStream("/run/stream", {
     method: "POST",
     body: JSON.stringify(options.useCache === false ? { question, use_cache: false } : { question }),

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RunResponse } from "@/api/runAdapter";
 import type { ProgressStep } from "@/types/progress";
 
-const GUARDS = { selectOnly: true, blockDestructive: true, domainRules: true, maxRows: 100 };
 
 const table = { database: "ecommerce", columns: ["n"], rows: [[1], [2]], truncated: false, error: null };
 const answered: RunResponse = {
@@ -48,7 +47,7 @@ async function askWithStream(chunks: string[]) {
   vi.resetModules();
   const { askQuestion } = await import("@/api/query");
   const steps: ProgressStep[] = [];
-  const outcome = askQuestion("q", GUARDS, { onProgress: (step) => steps.push(step) });
+  const outcome = askQuestion("q", { onProgress: (step) => steps.push(step) });
   return { outcome, steps, fetchMock };
 }
 
@@ -99,7 +98,7 @@ describe("askQuestion over the streaming API", () => {
     vi.stubGlobal("fetch", fetchMock);
     vi.resetModules();
     const { askQuestion } = await import("@/api/query");
-    await askQuestion("q", GUARDS, { useCache: false });
+    await askQuestion("q", { useCache: false });
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api.test/run/stream",
       expect.objectContaining({ body: JSON.stringify({ question: "q", use_cache: false }) }),

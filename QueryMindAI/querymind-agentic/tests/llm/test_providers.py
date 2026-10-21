@@ -84,3 +84,25 @@ def test_missing_openai_key(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with pytest.raises(MissingApiKeyError, match="OPENAI_API_KEY"):
         create_llm("openai")
+
+
+def test_gemini_requests_time_out_and_timeouts_are_retried(monkeypatch):
+    import httpx
+
+    from querymind.llm import gemini_client
+
+    client = gemini_client.make_client("test-key")
+    assert client._api_client._http_options.timeout == gemini_client.REQUEST_TIMEOUT_SECONDS * 1000
+
+    monkeypatch.setattr(gemini_client.time, "sleep", lambda _: None)
+    calls = []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise httpx.ReadTimeout("stalled")
+        return "ok"
+
+    assert gemini_client.with_retry(flaky) == "ok" and len(calls) == 3
+    with pytest.raises(httpx.ReadTimeout):
+        gemini_client.with_retry(lambda: (_ for _ in ()).throw(httpx.ReadTimeout("stalled")), max_retries=1)

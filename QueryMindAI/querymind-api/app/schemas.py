@@ -24,7 +24,8 @@ class Response(BaseModel):
 
 class IndexRequest(Request):
     files: list[str] | None = Field(
-        default=None, description="File names from GET /sources; omit to index every source file"
+        default=None,
+        description="File names from GET /sources; omit to index every source file",
     )
     database: str | None = Field(default=None, description="Override the detected database name (SQL files)")
     dialect: Literal["mysql", "postgresql"] | None = Field(default=None, description="Override the detected dialect")
@@ -40,7 +41,9 @@ class AskRequest(Request):
 
 class RunRequest(AskRequest):
     max_rows: int | None = Field(
-        default=None, ge=1, description="Rows fetched per query; cannot exceed the server limit"
+        default=None,
+        ge=1,
+        description="Rows fetched per query; cannot exceed the guardrail row limit (GET /guardrails)",
     )
     max_repairs: int = Field(default=2, ge=0, le=5, description="Times to regenerate SQL after an error")
     use_cache: bool = Field(
@@ -124,7 +127,12 @@ class IntentOut(Response):
     """What the question asks for, decided before any SQL is written."""
 
     query_type: Literal[
-        "SELECT_SIMPLE", "SELECT_AGGREGATE", "SELECT_JOIN", "SELECT_TEMPORAL", "UPDATE", "UNSUPPORTED"
+        "SELECT_SIMPLE",
+        "SELECT_AGGREGATE",
+        "SELECT_JOIN",
+        "SELECT_TEMPORAL",
+        "UPDATE",
+        "UNSUPPORTED",
     ] = Field(description="UPDATE drafts are returned but never executed; UNSUPPORTED requests are refused")
     tables_mentioned: list[str]
     columns_mentioned: list[str]
@@ -188,7 +196,7 @@ class RunResponse(Response):
     question: str
     status: Literal["answered", "not_answerable", "failed", "blocked", "generated"] = Field(
         description="answered: SQL ran and was answered; generated: an UPDATE was drafted and NOT executed; "
-        "blocked: refused by the intent classifier (DELETE, INSERT, DDL) before any SQL was written"
+        "blocked: refused by a guardrail question rule or the intent classifier before any SQL was written"
     )
     model: str
     intent: IntentOut | None

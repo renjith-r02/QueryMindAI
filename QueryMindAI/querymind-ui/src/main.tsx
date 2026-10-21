@@ -10,7 +10,6 @@ import "@/styles/globals.css";
 import { App } from "@/app/App";
 import { env } from "@/config/env";
 import { useHistoryStore } from "@/features/history/store";
-import { DEFAULT_SETTINGS } from "@/features/settings/store";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root");
@@ -19,7 +18,7 @@ async function start(container: HTMLElement) {
   if (env.useMocks) {
     // Example history for the demo; loaded on demand so it is not in the API build.
     const { seedHistory } = await import("@/mocks/seed");
-    useHistoryStore.getState().seedIfEmpty(seedHistory(DEFAULT_SETTINGS));
+    useHistoryStore.getState().seedIfEmpty(seedHistory());
   }
 
   createRoot(container).render(

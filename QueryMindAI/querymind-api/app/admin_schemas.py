@@ -69,7 +69,8 @@ class ModelConfigUpdate(Request):
     embedding_provider: Literal["gemini", "fastembed"] = "gemini"
     embedding_model: str = Field(default="", description="Empty for the provider default")
     embedding_dimensions: Literal[768, 1536, 3072] | None = Field(
-        default=None, description="Gemini embedding size; changing it requires re-indexing"
+        default=None,
+        description="Gemini embedding size; changing it requires re-indexing",
     )
 
     _secrets = field_validator("openai_api_key", "gemini_api_key")(_check_secret)
@@ -124,14 +125,23 @@ class OktaConfigUpdate(Request):
     enabled: bool = Field(default=False, description="Turn on Okta sign-in once QueryMind enforces it")
     org_url: str = Field(default="", description="Okta org URL, e.g. https://acme.okta.com")
     authorization_server_id: str = Field(
-        default="default", description="'default', a custom server id, or empty for the org authorization server"
+        default="default",
+        description="'default', a custom server id, or empty for the org authorization server",
     )
     client_id: str = Field(default="", max_length=128)
     client_secret: str | None = Field(default=None, description=SECRET_HELP)
     scopes: str = Field(default="openid profile email groups", max_length=300)
     groups_claim: str = Field(default="groups", max_length=64)
-    admin_group: str = Field(default="", max_length=128, description="Okta group whose members get the admin console")
-    user_group: str = Field(default="", max_length=128, description="Okta group allowed to use QueryMind; empty = all")
+    admin_group: str = Field(
+        default="",
+        max_length=128,
+        description="Okta group whose members get the admin console",
+    )
+    user_group: str = Field(
+        default="",
+        max_length=128,
+        description="Okta group allowed to use QueryMind; empty = all",
+    )
     redirect_uri: str = Field(default="", description="Sign-in redirect URI registered in the Okta app")
     post_logout_redirect_uri: str = Field(default="", description="Sign-out redirect URI registered in the Okta app")
 
