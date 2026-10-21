@@ -1,0 +1,49 @@
+[project]
+name = "querymindai"
+version = "0.1.0"
+description = "Index database knowledge, generate read-only SQL with an LLM, run it and answer from the results."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "cryptography>=50.0.2",
+    "google-genai>=2.31.0",
+    "openai>=3.33.0",
+    "psycopg[binary]>=3.3.6",
+    "pymysql>=1.2.3",
+    "python-dotenv>=1.2.4",
+    "qdrant-client[fastembed]>=1.15",
+    "sqlalchemy>=2.1.5",
+]
+
+[project.scripts]
+querymind = "querymind.cli:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.14",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "--strict-markers"]
+# tests/support holds shared fakes (imported as `support.fakes`).
+pythonpath = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["querymind"]

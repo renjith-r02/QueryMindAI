@@ -1,0 +1,90 @@
+# QueryMind API
+
+`querymind-api` is a FastAPI service that exposes the same operations as the
+`querymind-agentic` command line (`querymind`). Both call the shared
+`querymind.service.QueryMindService`, so behaviour is identical.
+
+## Run locally
+
+Requires Python 3.13 and [uv](https://docs.astral.sh/uv/). `querymind-agentic`
+is installed as an editable path dependency, so changes there apply immediately.
+
+```bash
+uv sync --extra dev
+uv run uvicorn app.main:app --reload
+uv run pytest
+```
+
+Interactive docs: http://localhost:8000/docs
+
+## Configuration
+
+Settings are read from the environment, then `querymind-api/.env`, then
+`querymind-agentic/.env` (see that project's `.env.example`): API keys,
+embedding provider, `LLM_PROVIDER` (`gemini` by default, or `openai` for GPT-6 Luna),
+`LLM_MODEL`, `LLM_REASONING_EFFORT`, Qdrant URL and collection,
+`QUERYMIND_DB_<NAME>` connection URLs, `QUERYMIND_MAX_ROWS`,
+`QUERYMIND_QUERY_TIMEOUT`. API-only settings are in `.env.example` here.
+
+The LLM model, API keys and connection settings are server configuration only.
+Requests reject unknown fields, so a caller cannot pick a model.
+
+## Endpoints
+
+| Method | Path       | CLI equivalent            | Purpose                                                    |
+| ------ | ---------- | ------------------------- | ---------------------------------------------------------- |
+| GET    | `/sources` | (files in `sqls/`)        | List files that can be indexed                             |
+| POST   | `/index`   | `index`                   | Parse files and replace them in Qdrant (`dry_run` to parse only) |
+| GET    | `/search`  | `search`                  | Semantic search: `q`, `limit`, `doc_type`, `database`, `include_content` |
+| POST   | `/ask`     | `ask`                     | Retrieve context and generate SQL without running it      |
+| POST   | `/run`     | `run`                     | Generate SQL, run it read-only, answer from the results    |
+| POST   | `/ask/stream`, `/run/stream` | `ask` / `run` | Same, streamed as Server-Sent Events (see below)     |
+| GET    | `/health`  |                           | Health check                                               |
+
+Examples:
+
+```bash
+curl -X POST localhost:8000/index -H 'content-type: application/json' -d '{"dry_run": true}'
+curl 'localhost:8000/search?q=refunds%20paid%20per%20month&doc_type=example_query'
+curl -X POST localhost:8000/ask -H 'content-type: application/json' \
+     -d '{"question": "net revenue by category last month"}'
+curl -X POST localhost:8000/run -H 'content-type: application/json' \
+     -d '{"question": "top 5 products by revenue this year", "max_rows": 100}'
+```
+
+Admin settings (used by the UI's Admin console):
+
+| Method   | Path                        | Purpose                                                                 |
+| -------- | --------------------------- | ----------------------------------------------------------------------- |
+| GET, PUT | `/admin/model-config`       | LLM provider/model/API keys and embeddings, in `querymind-agentic/.env` |
+| POST     | `/admin/model-config/test`  | Check the saved key and model with the provider (uses no tokens)        |
+| GET, PUT | `/admin/okta`               | Okta OIDC settings, in `querymind-api/.env`                             |
+| POST     | `/admin/okta/test`          | Fetch the Okta authorization server's discovery document                |
+
+Saving applies immediately, without a restart. API keys and the Okta client secret
+are write-only: responses show only `…abcd`. The Okta test only calls Okta domains;
+add a custom Okta domain with `QUERYMIND_OKTA_ALLOWED_HOSTS`. These endpoints are
+not authenticated yet, so anyone who can reach the API can change the model
+settings; keep the API on a trusted network until sign-in is enforced.
+
+Streaming: `/ask/stream` and `/run/stream` take the same body and answer with
+`text/event-stream`: `progress` events (`{id, status, message, detail}`; each step
+is sent `running`, then `done` or `failed`), then one `result` event with the same
+body as the non-streaming endpoint, or one `error` event (`{status, detail}`).
+Keep-alive comments are sent every 15 s; closing the connection cancels the work.
+
+```bash
+curl -N -X POST localhost:8000/run/stream -H 'content-type: application/json' \
+     -d '{"question": "top 5 products by revenue"}'
+```
+
+Notes:
+
+- `/index` only accepts file names returned by `/sources`, never filesystem paths.
+  `recreate: true` drops the whole collection first.
+- `/run` returns 200 with `status` = `answered`, `not_answerable` or `failed`.
+  `max_rows` cannot exceed the server's `QUERYMIND_MAX_ROWS`.
+- Errors: 503 if the model provider's key is missing or Qdrant is unreachable,
+  502 if a Gemini or OpenAI call fails, 409 if the collection's vector size does not match the
+  embedding model (re-index with `recreate: true`).
+- There is no authentication yet. Do not expose this service publicly as is.

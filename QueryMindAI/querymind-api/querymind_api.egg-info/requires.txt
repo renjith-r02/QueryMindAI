@@ -1,0 +1,9 @@
+fastapi<1.0.0,>=0.115.0
+httpx<1.0.0,>=0.28.0
+python-dotenv>=1.0.0
+querymindai
+uvicorn[standard]<1.0.0,>=0.32.0
+
+[dev]
+httpx<1.0.0,>=0.28.0
+pytest<9.0.0,>=8.3.0

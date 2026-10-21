@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module external.system.id="pyproject.toml" type="PYTHON_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$/querymind-api">
+      <sourceFolder url="file://$MODULE_DIR$/querymind-api" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/querymind-api/tests" isTestSource="true" />
+      <excludeFolder url="file://$MODULE_DIR$/querymind-api/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/querymind-api/.pytest_cache" />
+      <excludeFolder url="file://$MODULE_DIR$/querymind-api/querymind_api.egg-info" />
+    </content>
+    <orderEntry type="jdk" jdkName="~/PycharmProjects/QueryMindAI/querymind-api/.venv" jdkType="Python SDK" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <!-- `querymind` comes from querymind-agentic/src (installed editable in querymind-api/.venv). -->
+    <orderEntry type="module" module-name="querymindai" />
+  </component>
+  <component name="TestRunnerService">
+    <option name="PROJECT_TEST_RUNNER" value="py.test" />
+  </component>
+</module>

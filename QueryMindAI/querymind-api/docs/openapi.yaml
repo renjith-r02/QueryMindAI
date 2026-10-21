@@ -1,0 +1,1533 @@
+openapi: 3.1.0
+info:
+  title: QueryMind API
+  description: 'FastAPI service for QueryMind: index database knowledge, search it,
+    generate SQL and answer questions from the databases.'
+  version: 0.1.0
+paths:
+  /:
+    get:
+      tags:
+      - service
+      summary: Read Root
+      operationId: read_root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+  /health:
+    get:
+      tags:
+      - health
+      summary: Read Health
+      operationId: read_health_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /sources:
+    get:
+      tags:
+      - knowledge
+      summary: List Sources
+      description: Schema and question/SQL files that can be indexed.
+      operationId: list_sources_sources_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/SourceFile'
+                type: array
+                title: Response List Sources Sources Get
+  /index:
+    post:
+      tags:
+      - knowledge
+      summary: Index
+      description: Parse source files and replace their chunks in the vector collection.
+      operationId: index_index_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IndexRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /search:
+    get:
+      tags:
+      - knowledge
+      summary: Search
+      description: Semantic search over the indexed knowledge.
+      operationId: search_search_get
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Text to search for
+          title: Q
+        description: Text to search for
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 5
+          title: Limit
+      - name: doc_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: e.g. table, example_query, business_rule
+          title: Doc Type
+        description: e.g. table, example_query, business_rule
+      - name: database
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: e.g. ecommerce, returns_db
+          title: Database
+        description: e.g. ecommerce, returns_db
+      - name: include_content
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Content
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SearchHitOut'
+                title: Response Search Search Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ask:
+    post:
+      tags:
+      - queries
+      summary: Ask
+      description: Retrieve context and generate SQL for the question, without running
+        it.
+      operationId: ask_ask_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /ask/stream:
+    post:
+      tags:
+      - queries
+      summary: Ask (streaming)
+      description: 'Same as `POST /ask`, with live progress.
+
+
+        Streams Server-Sent Events while the work runs:
+
+        `progress` events (`{id, status, message, detail}`; each step is reported
+        `running`, then `done` or `failed`),
+
+        then one `result` event with the same body as the non-streaming endpoint,
+
+        or one `error` event (`{status, detail}`). Closing the connection cancels
+        the work.'
+      operationId: ask_stream_ask_stream_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AskRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/event-stream:
+              itemSchema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                  event:
+                    type: string
+                  id:
+                    type: string
+                  retry:
+                    type: integer
+                    minimum: 0
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /run:
+    post:
+      tags:
+      - queries
+      summary: Run
+      description: 'Generate SQL, run it read-only on the databases, and answer from
+        the results.
+
+
+        Every question is classified first (`intent`). DELETE, INSERT and DDL requests
+        are refused
+
+        (`status: blocked`) before any SQL is written; UPDATE requests are drafted
+        and returned but never
+
+        executed (`status: generated`). All statuses return 200.'
+      operationId: run_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /run/stream:
+    post:
+      tags:
+      - queries
+      summary: Run (streaming)
+      description: 'Same as `POST /run`, with live progress.
+
+
+        Streams Server-Sent Events while the work runs:
+
+        `progress` events (`{id, status, message, detail}`; each step is reported
+        `running`, then `done` or `failed`),
+
+        then one `result` event with the same body as the non-streaming endpoint,
+
+        or one `error` event (`{status, detail}`). Closing the connection cancels
+        the work.'
+      operationId: run_stream_run_stream_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            text/event-stream:
+              itemSchema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                  event:
+                    type: string
+                  id:
+                    type: string
+                  retry:
+                    type: integer
+                    minimum: 0
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /admin/model-config:
+    get:
+      tags:
+      - admin
+      summary: Read the model configuration
+      description: The language and embedding model settings in use. API keys are
+        shown only as `…abcd`.
+      operationId: read_model_config_admin_model_config_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelConfig'
+    put:
+      tags:
+      - admin
+      summary: Update the model configuration
+      description: Save to querymind-agentic/.env and apply immediately (new requests
+        use the new model).
+      operationId: update_model_config_admin_model_config_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelConfigUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /admin/model-config/test:
+    post:
+      tags:
+      - admin
+      summary: Test the language model
+      description: Check that the saved API key works and the configured model exists.
+        Uses no tokens.
+      operationId: test_model_config_admin_model_config_test_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTest'
+  /admin/cache:
+    get:
+      tags:
+      - admin
+      summary: Semantic cache statistics
+      description: How many answers are cached, and the similarity threshold and lifetime
+        that apply.
+      operationId: read_cache_admin_cache_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStatsOut'
+    delete:
+      tags:
+      - admin
+      summary: Clear the semantic cache
+      description: Drop every cached answer, e.g. after the data changed. Re-indexing
+        also clears it.
+      operationId: clear_cache_admin_cache_delete
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CacheStatsOut'
+  /admin/okta:
+    get:
+      tags:
+      - admin
+      summary: Read the Okta configuration
+      description: Okta OIDC settings. The client secret is shown only as `…abcd`.
+      operationId: read_okta_admin_okta_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaConfig'
+    put:
+      tags:
+      - admin
+      summary: Update the Okta configuration
+      description: Save the Okta settings to querymind-api/.env.
+      operationId: update_okta_admin_okta_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OktaConfigUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /admin/okta/test:
+    post:
+      tags:
+      - admin
+      summary: Test the Okta connection
+      description: Fetch the authorization server's OpenID discovery document to check
+        the org URL and server id.
+      operationId: test_okta_admin_okta_test_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OktaTestRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OktaTestResult'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AskRequest:
+      properties:
+        question:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Question
+        database:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Database
+          description: Restrict retrieval to one database, e.g. ecommerce
+      additionalProperties: false
+      type: object
+      required:
+      - question
+      title: AskRequest
+    AskResponse:
+      properties:
+        question:
+          type: string
+          title: Question
+        status:
+          type: string
+          enum:
+          - generated
+          - not_answerable
+          - blocked
+          title: Status
+          description: 'generated: SQL was written (for UPDATE: drafted, not run);
+            blocked: refused by intent'
+        model:
+          type: string
+          title: Model
+        intent:
+          anyOf:
+          - $ref: '#/components/schemas/IntentOut'
+          - type: 'null'
+        answer:
+          $ref: '#/components/schemas/SqlAnswer'
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        context:
+          items:
+            $ref: '#/components/schemas/ContextItemOut'
+          type: array
+          title: Context
+      type: object
+      required:
+      - question
+      - status
+      - model
+      - intent
+      - answer
+      - warnings
+      - context
+      title: AskResponse
+    AttemptOut:
+      properties:
+        plan:
+          $ref: '#/components/schemas/SqlAnswer'
+        results:
+          items:
+            $ref: '#/components/schemas/QueryResultOut'
+          type: array
+          title: Results
+        merged:
+          anyOf:
+          - $ref: '#/components/schemas/QueryResultOut'
+          - type: 'null'
+      type: object
+      required:
+      - plan
+      - results
+      - merged
+      title: AttemptOut
+    CacheInfo:
+      properties:
+        hit:
+          type: boolean
+          title: Hit
+        similarity:
+          type: number
+          title: Similarity
+          description: Cosine similarity to the cached question
+        question:
+          type: string
+          title: Question
+          description: The question the cached answer was produced for
+        cached_at:
+          type: number
+          title: Cached At
+          description: When the cached answer was produced (unix time)
+      type: object
+      required:
+      - hit
+      - similarity
+      - question
+      - cached_at
+      title: CacheInfo
+      description: Present when the answer came from the semantic cache.
+    CacheStatsOut:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+        entries:
+          type: integer
+          title: Entries
+        threshold:
+          type: number
+          title: Threshold
+          description: Minimum similarity for a cached answer to be reused
+        ttl_seconds:
+          type: integer
+          title: Ttl Seconds
+          description: How long an answer may be reused
+        collection:
+          type: string
+          title: Collection
+      type: object
+      required:
+      - enabled
+      - entries
+      - threshold
+      - ttl_seconds
+      - collection
+      title: CacheStatsOut
+    ChunkSummary:
+      properties:
+        doc_type:
+          type: string
+          title: Doc Type
+        title:
+          type: string
+          title: Title
+      type: object
+      required:
+      - doc_type
+      - title
+      title: ChunkSummary
+    ConnectionTest:
+      properties:
+        ok:
+          type: boolean
+          title: Ok
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - ok
+      - message
+      title: ConnectionTest
+    ContextItemOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        score:
+          type: number
+          title: Score
+        doc_type:
+          type: string
+          title: Doc Type
+        database:
+          type: string
+          title: Database
+        title:
+          type: string
+          title: Title
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - id
+      - score
+      - doc_type
+      - database
+      - title
+      - content
+      title: ContextItemOut
+    EmbeddingConfig:
+      properties:
+        provider:
+          type: string
+          enum:
+          - gemini
+          - fastembed
+          title: Provider
+        model:
+          type: string
+          title: Model
+        default_models:
+          additionalProperties:
+            type: string
+          type: object
+          title: Default Models
+        dimensions:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Dimensions
+      type: object
+      required:
+      - provider
+      - model
+      - default_models
+      - dimensions
+      title: EmbeddingConfig
+    FinalAnswer:
+      properties:
+        answer:
+          type: string
+          title: Answer
+          description: Answer to the question in concise markdown, based only on the
+            results
+        caveats:
+          items:
+            type: string
+          type: array
+          title: Caveats
+          description: 'Limitations: empty data, truncation, assumptions, data quality'
+      type: object
+      required:
+      - answer
+      - caveats
+      title: FinalAnswer
+    GeneratedQuery:
+      properties:
+        database:
+          type: string
+          title: Database
+          description: Database the query runs on, e.g. ecommerce or returns_db
+        dialect:
+          type: string
+          title: Dialect
+          description: 'SQL dialect of that database: mysql or postgresql'
+        sql:
+          type: string
+          title: Sql
+          description: A single read-only SQL statement
+        purpose:
+          type: string
+          title: Purpose
+          description: What this query returns and why it is needed
+      type: object
+      required:
+      - database
+      - dialect
+      - sql
+      - purpose
+      title: GeneratedQuery
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+        service:
+          type: string
+          title: Service
+      type: object
+      required:
+      - status
+      - service
+      title: HealthResponse
+    IndexRequest:
+      properties:
+        files:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Files
+          description: File names from GET /sources; omit to index every source file
+        database:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Database
+          description: Override the detected database name (SQL files)
+        dialect:
+          anyOf:
+          - type: string
+            enum:
+            - mysql
+            - postgresql
+          - type: 'null'
+          title: Dialect
+          description: Override the detected dialect
+        recreate:
+          type: boolean
+          title: Recreate
+          description: Drop and recreate the whole collection first
+          default: false
+        dry_run:
+          type: boolean
+          title: Dry Run
+          description: Parse only; do not embed or write
+          default: false
+        include_chunks:
+          type: boolean
+          title: Include Chunks
+          description: List every chunk in the response
+          default: false
+      additionalProperties: false
+      type: object
+      title: IndexRequest
+    IndexResponse:
+      properties:
+        dry_run:
+          type: boolean
+          title: Dry Run
+        indexed:
+          type: integer
+          title: Indexed
+        collection:
+          type: string
+          title: Collection
+        embedding:
+          type: string
+          title: Embedding
+        sources:
+          items:
+            $ref: '#/components/schemas/SourceSummary'
+          type: array
+          title: Sources
+      type: object
+      required:
+      - dry_run
+      - indexed
+      - collection
+      - embedding
+      - sources
+      title: IndexResponse
+    IntentOut:
+      properties:
+        query_type:
+          type: string
+          enum:
+          - SELECT_SIMPLE
+          - SELECT_AGGREGATE
+          - SELECT_JOIN
+          - SELECT_TEMPORAL
+          - UPDATE
+          - UNSUPPORTED
+          title: Query Type
+          description: UPDATE drafts are returned but never executed; UNSUPPORTED
+            requests are refused
+        tables_mentioned:
+          items:
+            type: string
+          type: array
+          title: Tables Mentioned
+        columns_mentioned:
+          items:
+            type: string
+          type: array
+          title: Columns Mentioned
+        traits:
+          items:
+            type: string
+            enum:
+            - aggregate
+            - join
+            - temporal
+          type: array
+          title: Traits
+        reason:
+          type: string
+          title: Reason
+        source:
+          type: string
+          enum:
+          - rules
+          - model
+          - rules-fallback
+          title: Source
+          description: What decided the intent
+        blocked_message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Blocked Message
+          description: Why the request was refused, when it was
+      type: object
+      required:
+      - query_type
+      - tables_mentioned
+      - columns_mentioned
+      - traits
+      - reason
+      - source
+      - blocked_message
+      title: IntentOut
+      description: What the question asks for, decided before any SQL is written.
+    ModelConfig:
+      properties:
+        llm_provider:
+          type: string
+          enum:
+          - gemini
+          - openai
+          title: Llm Provider
+        active_model:
+          type: string
+          title: Active Model
+          description: The model the agent uses now
+        openai:
+          $ref: '#/components/schemas/OpenAIConfig'
+        gemini:
+          $ref: '#/components/schemas/ProviderConfig'
+        embedding:
+          $ref: '#/components/schemas/EmbeddingConfig'
+        reasoning_efforts:
+          items:
+            type: string
+          type: array
+          title: Reasoning Efforts
+        config_file:
+          type: string
+          title: Config File
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+      type: object
+      required:
+      - llm_provider
+      - active_model
+      - openai
+      - gemini
+      - embedding
+      - reasoning_efforts
+      - config_file
+      - warnings
+      title: ModelConfig
+    ModelConfigUpdate:
+      properties:
+        llm_provider:
+          type: string
+          enum:
+          - gemini
+          - openai
+          title: Llm Provider
+          description: Model that writes the SQL and the answers
+        openai_model:
+          type: string
+          title: Openai Model
+          description: Empty for the default (gpt-6-luna)
+          default: ''
+        openai_reasoning_effort:
+          anyOf:
+          - type: string
+            enum:
+            - none
+            - low
+            - medium
+            - high
+            - xhigh
+            - max
+          - type: 'null'
+          title: Openai Reasoning Effort
+          description: Empty for the model's default
+        openai_api_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Openai Api Key
+          description: Omit or null to keep the current value, empty string to remove
+            it, or the new value
+        gemini_model:
+          type: string
+          title: Gemini Model
+          description: Empty for the default (gemini-3.8-flash)
+          default: ''
+        gemini_api_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Gemini Api Key
+          description: Omit or null to keep the current value, empty string to remove
+            it, or the new value; also used for Gemini embeddings
+        embedding_provider:
+          type: string
+          enum:
+          - gemini
+          - fastembed
+          title: Embedding Provider
+          default: gemini
+        embedding_model:
+          type: string
+          title: Embedding Model
+          description: Empty for the provider default
+          default: ''
+        embedding_dimensions:
+          anyOf:
+          - type: integer
+            enum:
+            - 768
+            - 1536
+            - 3072
+          - type: 'null'
+          title: Embedding Dimensions
+          description: Gemini embedding size; changing it requires re-indexing
+      additionalProperties: false
+      type: object
+      required:
+      - llm_provider
+      title: ModelConfigUpdate
+    OktaConfig:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+        org_url:
+          type: string
+          title: Org Url
+        authorization_server_id:
+          type: string
+          title: Authorization Server Id
+        issuer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Issuer
+          description: Issuer URL derived from the org URL and authorization server
+        client_id:
+          type: string
+          title: Client Id
+        client_secret:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Client Secret
+          description: '''…abcd'' when a secret is configured, otherwise null'
+        scopes:
+          type: string
+          title: Scopes
+        groups_claim:
+          type: string
+          title: Groups Claim
+        admin_group:
+          type: string
+          title: Admin Group
+        user_group:
+          type: string
+          title: User Group
+        redirect_uri:
+          type: string
+          title: Redirect Uri
+        post_logout_redirect_uri:
+          type: string
+          title: Post Logout Redirect Uri
+        config_file:
+          type: string
+          title: Config File
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+      type: object
+      required:
+      - enabled
+      - org_url
+      - authorization_server_id
+      - issuer
+      - client_id
+      - client_secret
+      - scopes
+      - groups_claim
+      - admin_group
+      - user_group
+      - redirect_uri
+      - post_logout_redirect_uri
+      - config_file
+      - warnings
+      title: OktaConfig
+    OktaConfigUpdate:
+      properties:
+        enabled:
+          type: boolean
+          title: Enabled
+          description: Turn on Okta sign-in once QueryMind enforces it
+          default: false
+        org_url:
+          type: string
+          title: Org Url
+          description: Okta org URL, e.g. https://acme.okta.com
+          default: ''
+        authorization_server_id:
+          type: string
+          title: Authorization Server Id
+          description: '''default'', a custom server id, or empty for the org authorization
+            server'
+          default: default
+        client_id:
+          type: string
+          maxLength: 128
+          title: Client Id
+          default: ''
+        client_secret:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Client Secret
+          description: Omit or null to keep the current value, empty string to remove
+            it, or the new value
+        scopes:
+          type: string
+          maxLength: 300
+          title: Scopes
+          default: openid profile email groups
+        groups_claim:
+          type: string
+          maxLength: 64
+          title: Groups Claim
+          default: groups
+        admin_group:
+          type: string
+          maxLength: 128
+          title: Admin Group
+          description: Okta group whose members get the admin console
+          default: ''
+        user_group:
+          type: string
+          maxLength: 128
+          title: User Group
+          description: Okta group allowed to use QueryMind; empty = all
+          default: ''
+        redirect_uri:
+          type: string
+          title: Redirect Uri
+          description: Sign-in redirect URI registered in the Okta app
+          default: ''
+        post_logout_redirect_uri:
+          type: string
+          title: Post Logout Redirect Uri
+          description: Sign-out redirect URI registered in the Okta app
+          default: ''
+      additionalProperties: false
+      type: object
+      title: OktaConfigUpdate
+    OktaTestRequest:
+      properties:
+        org_url:
+          type: string
+          title: Org Url
+        authorization_server_id:
+          type: string
+          title: Authorization Server Id
+          default: default
+      additionalProperties: false
+      type: object
+      required:
+      - org_url
+      title: OktaTestRequest
+    OktaTestResult:
+      properties:
+        ok:
+          type: boolean
+          title: Ok
+        message:
+          type: string
+          title: Message
+        issuer:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Issuer
+        authorization_endpoint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Authorization Endpoint
+        token_endpoint:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Token Endpoint
+        jwks_uri:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Jwks Uri
+        scopes_supported:
+          items:
+            type: string
+          type: array
+          title: Scopes Supported
+          default: []
+      type: object
+      required:
+      - ok
+      - message
+      title: OktaTestResult
+    OpenAIConfig:
+      properties:
+        model:
+          type: string
+          title: Model
+          description: Configured model, empty when the default is used
+        default_model:
+          type: string
+          title: Default Model
+        api_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Api Key
+          description: '''…abcd'' when a key is configured, otherwise null'
+        reasoning_effort:
+          anyOf:
+          - type: string
+            enum:
+            - none
+            - low
+            - medium
+            - high
+            - xhigh
+            - max
+          - type: 'null'
+          title: Reasoning Effort
+      type: object
+      required:
+      - model
+      - default_model
+      - api_key
+      - reasoning_effort
+      title: OpenAIConfig
+    ProviderConfig:
+      properties:
+        model:
+          type: string
+          title: Model
+          description: Configured model, empty when the default is used
+        default_model:
+          type: string
+          title: Default Model
+        api_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Api Key
+          description: '''…abcd'' when a key is configured, otherwise null'
+      type: object
+      required:
+      - model
+      - default_model
+      - api_key
+      title: ProviderConfig
+    QueryResultOut:
+      properties:
+        database:
+          type: string
+          title: Database
+        sql:
+          type: string
+          title: Sql
+        columns:
+          items:
+            type: string
+          type: array
+          title: Columns
+        rows:
+          items:
+            items: {}
+            type: array
+          type: array
+          title: Rows
+        truncated:
+          type: boolean
+          title: Truncated
+        elapsed_ms:
+          type: number
+          title: Elapsed Ms
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+        error_kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error Kind
+      type: object
+      required:
+      - database
+      - sql
+      - columns
+      - rows
+      - truncated
+      - elapsed_ms
+      - error
+      - error_kind
+      title: QueryResultOut
+    RunRequest:
+      properties:
+        question:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Question
+        database:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Database
+          description: Restrict retrieval to one database, e.g. ecommerce
+        max_rows:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Max Rows
+          description: Rows fetched per query; cannot exceed the server limit
+        max_repairs:
+          type: integer
+          maximum: 5.0
+          minimum: 0.0
+          title: Max Repairs
+          description: Times to regenerate SQL after an error
+          default: 2
+        use_cache:
+          type: boolean
+          title: Use Cache
+          description: Reuse the answer to a recent near-identical question (no LLM
+            calls). false always asks the model and refreshes the cached answer.
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - question
+      title: RunRequest
+    RunResponse:
+      properties:
+        question:
+          type: string
+          title: Question
+        status:
+          type: string
+          enum:
+          - answered
+          - not_answerable
+          - failed
+          - blocked
+          - generated
+          title: Status
+          description: 'answered: SQL ran and was answered; generated: an UPDATE was
+            drafted and NOT executed; blocked: refused by the intent classifier (DELETE,
+            INSERT, DDL) before any SQL was written'
+        model:
+          type: string
+          title: Model
+        intent:
+          anyOf:
+          - $ref: '#/components/schemas/IntentOut'
+          - type: 'null'
+        cache:
+          anyOf:
+          - $ref: '#/components/schemas/CacheInfo'
+          - type: 'null'
+          description: Set when the answer came from the semantic cache
+        final:
+          anyOf:
+          - $ref: '#/components/schemas/FinalAnswer'
+          - type: 'null'
+        result:
+          anyOf:
+          - $ref: '#/components/schemas/QueryResultOut'
+          - type: 'null'
+          description: The table the final answer is based on
+        warnings:
+          items:
+            type: string
+          type: array
+          title: Warnings
+        attempts:
+          items:
+            $ref: '#/components/schemas/AttemptOut'
+          type: array
+          title: Attempts
+        context:
+          items:
+            $ref: '#/components/schemas/ContextItemOut'
+          type: array
+          title: Context
+      type: object
+      required:
+      - question
+      - status
+      - model
+      - intent
+      - final
+      - result
+      - warnings
+      - attempts
+      - context
+      title: RunResponse
+    SearchHitOut:
+      properties:
+        score:
+          type: number
+          title: Score
+        doc_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Doc Type
+        database:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Database
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Title
+        content:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Content
+      type: object
+      required:
+      - score
+      - doc_type
+      - database
+      - title
+      title: SearchHitOut
+    ServiceResponse:
+      properties:
+        message:
+          type: string
+          title: Message
+      type: object
+      required:
+      - message
+      title: ServiceResponse
+    SourceFile:
+      properties:
+        name:
+          type: string
+          title: Name
+        size_bytes:
+          type: integer
+          title: Size Bytes
+      type: object
+      required:
+      - name
+      - size_bytes
+      title: SourceFile
+    SourceSummary:
+      properties:
+        name:
+          type: string
+          title: Name
+        database:
+          type: string
+          title: Database
+        chunk_count:
+          type: integer
+          title: Chunk Count
+        counts:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Counts
+        chunks:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/ChunkSummary'
+            type: array
+          - type: 'null'
+          title: Chunks
+      type: object
+      required:
+      - name
+      - database
+      - chunk_count
+      - counts
+      title: SourceSummary
+    SqlAnswer:
+      properties:
+        answerable:
+          type: boolean
+          title: Answerable
+          description: False when the context does not support an answer
+        queries:
+          items:
+            $ref: '#/components/schemas/GeneratedQuery'
+          type: array
+          title: Queries
+          description: One query per database involved, in execution order
+        merge_steps:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Merge Steps
+          description: How to combine results of several queries in code; null for
+            a single query
+        merge_sql:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Merge Sql
+          description: SQLite query over tables q1, q2, ... (results of queries 1,
+            2, ...) that combines them; null for a single query
+        explanation:
+          type: string
+          title: Explanation
+          description: Short explanation of the approach and business rules applied
+        assumptions:
+          items:
+            type: string
+          type: array
+          title: Assumptions
+          description: Assumptions made, e.g. time window or definition used
+        sources:
+          items:
+            type: string
+          type: array
+          title: Sources
+          description: Context ids used, e.g. ['S1', 'S4']
+      type: object
+      required:
+      - answerable
+      - queries
+      - explanation
+      - assumptions
+      - sources
+      title: SqlAnswer
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
