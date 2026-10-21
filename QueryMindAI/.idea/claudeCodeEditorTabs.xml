@@ -1,32 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ClaudeCodeEditorTabs">
-    <option name="activeSessionId" value="a5243e06-b5df-492d-82ee-3588a729521a" />
+    <option name="activeSessionId" value="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" />
     <option name="openSessionIds">
       <list>
-        <option value="a29b2cb5-d99e-436b-b13c-eac3d8e858ab" />
         <option value="5016c226-898d-40ad-a4b4-709d9c4aea84" />
-        <option value="2f80be2a-0533-4aee-b193-627f05a3ade7" />
-        <option value="63bcdf39-29e7-411d-89f9-7f2cd25e4635" />
         <option value="a5243e06-b5df-492d-82ee-3588a729521a" />
+        <option value="f60b7953-18ab-43ba-b76d-0e91d8691aaa" />
+        <option value="9414a437-b866-4f23-b086-05b5b38d7942" />
+        <option value="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" />
       </list>
     </option>
     <option name="sessionPaths">
       <map>
-        <entry key="2f80be2a-0533-4aee-b193-627f05a3ade7" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
         <entry key="5016c226-898d-40ad-a4b4-709d9c4aea84" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
-        <entry key="63bcdf39-29e7-411d-89f9-7f2cd25e4635" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
-        <entry key="a29b2cb5-d99e-436b-b13c-eac3d8e858ab" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
+        <entry key="9414a437-b866-4f23-b086-05b5b38d7942" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
         <entry key="a5243e06-b5df-492d-82ee-3588a729521a" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
+        <entry key="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
+        <entry key="f60b7953-18ab-43ba-b76d-0e91d8691aaa" value="/sessions/b8702c1f-5446-45ae-a1ab-e8f74306663b" />
       </map>
     </option>
     <option name="sessionTitles">
       <map>
-        <entry key="2f80be2a-0533-4aee-b193-627f05a3ade7" value="analyze querymind-ui and share how structure can b" />
         <entry key="5016c226-898d-40ad-a4b4-709d9c4aea84" value="analyze querymind-ui and share how structure can b" />
-        <entry key="63bcdf39-29e7-411d-89f9-7f2cd25e4635" value="analyze querymind-ui and share how structure can b" />
-        <entry key="a29b2cb5-d99e-436b-b13c-eac3d8e858ab" value="analyze querymind-ui and share how structure can b" />
+        <entry key="9414a437-b866-4f23-b086-05b5b38d7942" value="analyze querymind-ui and share how structure can b" />
         <entry key="a5243e06-b5df-492d-82ee-3588a729521a" value="analyze querymind-ui and share how structure can b" />
+        <entry key="b468a673-7f9f-4c9a-9fc4-ef71c7b63d05" value="analyze querymind-ui and share how structure can b" />
+        <entry key="f60b7953-18ab-43ba-b76d-0e91d8691aaa" value="analyze querymind-ui and share how structure can b" />
       </map>
     </option>
   </component>

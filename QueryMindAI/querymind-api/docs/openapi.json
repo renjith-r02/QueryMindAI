@@ -652,6 +652,216 @@
           }
         }
       }
+    },
+    "/datasources": {
+      "get": {
+        "tags": [
+          "data sources"
+        ],
+        "summary": "List data sources",
+        "description": "Saved data sources (oldest first), then databases configured only in .env (`origin: \"env\"`,\nid `env:<name>`). The first call saves the documented ones from the schema files.\n\nQueries use a saved data source's settings; any field left empty, and the password, come from\nQUERYMIND_DB_<NAME> in .env. Databases without a saved data source use the .env URL as is.",
+        "operationId": "list_datasources_datasources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DataSource"
+                  },
+                  "type": "array",
+                  "title": "Response List Datasources Datasources Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "data sources"
+        ],
+        "summary": "Create a data source",
+        "description": "Connection fields depend on the type and never include passwords; credentials stay on the server.",
+        "operationId": "create_datasource_datasources_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataSourceInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataSource"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another data source already has that name"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/datasources/{source_id}": {
+      "get": {
+        "tags": [
+          "data sources"
+        ],
+        "summary": "Get a data source",
+        "operationId": "get_datasource_datasources__source_id__get",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataSource"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No data source with that id"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "data sources"
+        ],
+        "summary": "Replace a data source",
+        "description": "Replace a saved data source. For an `env:<name>` id, the settings are saved as a new data source.",
+        "operationId": "update_datasource_datasources__source_id__put",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataSourceInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataSource"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No data source with that id"
+          },
+          "409": {
+            "description": "Another data source already has that name"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "data sources"
+        ],
+        "summary": "Delete a data source",
+        "operationId": "delete_datasource_datasources__source_id__delete",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No data source with that id"
+          },
+          "409": {
+            "description": "Configured in .env; cannot be deleted here"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -915,6 +1125,151 @@
           "content"
         ],
         "title": "ContextItemOut"
+      },
+      "DataSource": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "mysql",
+              "postgresql",
+              "cassandra",
+              "dynamodb"
+            ],
+            "title": "Type"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "connection": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Connection",
+            "description": "Allowed keys depend on type; no secrets"
+          },
+          "sections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "purpose",
+                "data_location_map",
+                "table_overview",
+                "relationships",
+                "entity_diagram",
+                "join_paths",
+                "returns_questions",
+                "business_rules"
+              ]
+            },
+            "type": "object",
+            "title": "Sections",
+            "description": "Documentation, by section"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "number",
+            "title": "Updated At"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "qdrant",
+              "env"
+            ],
+            "title": "Origin",
+            "default": "qdrant"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type",
+          "id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DataSource",
+        "description": "A stored data source."
+      },
+      "DataSourceInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "mysql",
+              "postgresql",
+              "cassandra",
+              "dynamodb"
+            ],
+            "title": "Type"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "connection": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Connection",
+            "description": "Allowed keys depend on type; no secrets"
+          },
+          "sections": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "enum": [
+                "purpose",
+                "data_location_map",
+                "table_overview",
+                "relationships",
+                "entity_diagram",
+                "join_paths",
+                "returns_questions",
+                "business_rules"
+              ]
+            },
+            "type": "object",
+            "title": "Sections",
+            "description": "Documentation, by section"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "DataSourceInput",
+        "description": "What a client may set. Unknown fields are rejected."
       },
       "EmbeddingConfig": {
         "properties": {

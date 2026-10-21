@@ -12,16 +12,21 @@ many requests.
 
 from __future__ import annotations
 
+import logging
 import threading
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from qdrant_client import QdrantClient
 
 from querymind.agent.rag import QueryMindRAG, RagAnswer, refused_answer
 from querymind.agent.sql_agent import AgentResult, QueryMindAgent, refused_result
 from querymind.cache import CacheStats, SemanticCache
 from querymind.config import Settings
 from querymind.database.executor import DatabaseRegistry
+from querymind.datasources import DataSource, DataSourceInput, DataSourceRepository, from_schema_file
+from querymind.datasources.connections import connection_from_url, env_database_urls, resolve
 from querymind.exceptions import NoSourceFilesError
 from querymind.ingest.models import Chunk
 from querymind.ingest.qa_loader import load_qa_file
@@ -33,6 +38,7 @@ from querymind.llm.providers import LLM, create_llm
 from querymind.progress import ProgressCallback
 
 SOURCE_SUFFIXES = {".sql", ".json"}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -79,8 +85,11 @@ class QueryMindService:
         self._embedder = embedder
         self._llm = llm
         self._databases = databases
+        self._databases_injected = databases is not None
+        self.connection_notes: list[str] = []  # why databases were skipped or fell back to .env
         self._store: KnowledgeStore | None = None
         self._cache: SemanticCache | None = None
+        self._datasources: DataSourceRepository | None = None
         self._lock = threading.Lock()
 
     # -- shared clients, created on first use ------------------------------------------
@@ -113,12 +122,92 @@ class QueryMindService:
 
     @property
     def databases(self) -> DatabaseRegistry:
+        """Connections for queries: saved data sources first, QUERYMIND_DB_<NAME> in .env as fallback.
+
+        Rebuilt after any data source change. If the data source store can't be read, only .env is used."""
+        if self._databases is None:
+            stored = self._stored_datasources()
+            with self._lock:
+                if self._databases is None:
+                    resolution = resolve(stored, env_database_urls())
+                    self.connection_notes = resolution.notes
+                    for note in resolution.notes:
+                        logger.info("Database connections: %s", note)
+                    self._databases = DatabaseRegistry(
+                        resolution.urls, max_rows=self.settings.max_rows, timeout_seconds=self.settings.query_timeout
+                    )
+        return self._databases
+
+    def _stored_datasources(self) -> list[DataSource]:
+        try:
+            return self.datasources.list()
+        except Exception as error:  # noqa: BLE001 - queries must keep working from .env
+            logger.warning("Could not read saved data sources; using .env connections only: %s", error)
+            return []
+
+    def _datasources_changed(self) -> None:
+        """Saved settings changed: rebuild the query connections on next use."""
         with self._lock:
-            if self._databases is None:
-                self._databases = DatabaseRegistry.from_env(
-                    max_rows=self.settings.max_rows, timeout_seconds=self.settings.query_timeout
+            if self._databases is not None and not self._databases_injected:
+                self._databases.dispose()
+                self._databases = None
+
+    def list_datasources(self) -> list[DataSource]:
+        """Saved data sources, plus databases configured only in .env (origin "env", id "env:<name>")."""
+        stored = self.datasources.list()
+        saved = {source.name.lower() for source in stored}
+        env_only = []
+        for name, url in sorted(env_database_urls().items()):
+            if name in saved or (described := connection_from_url(url)) is None:
+                continue
+            kind, connection = described
+            env_only.append(
+                DataSource(
+                    id=f"env:{name}", origin="env", name=name, type=kind, connection=connection,
+                    created_at=0, updated_at=0,
                 )
-            return self._databases
+            )  # fmt: skip
+        return stored + env_only
+
+    def env_datasource(self, source_id: str) -> DataSource | None:
+        """The .env-only entry for an "env:<name>" id, if that database is still configured there."""
+        return next((s for s in self.list_datasources() if s.id == source_id and s.origin == "env"), None)
+
+    @property
+    def datasources(self) -> DataSourceRepository:
+        """Data source settings in Qdrant, seeded from the schema files on first use.
+
+        Uses its own Qdrant client, so it needs no embedding model or API key."""
+        with self._lock:
+            if self._datasources is None:
+                s = self.settings
+                client = (
+                    self._store.client
+                    if self._store is not None
+                    else QdrantClient(location=s.qdrant_url, api_key=s.qdrant_api_key)
+                )
+                self._datasources = DataSourceRepository(
+                    client,
+                    s.datasources_collection,
+                    seed=self._seed_datasources,
+                    on_change=self._datasources_changed,
+                )
+            return self._datasources
+
+    def _seed_datasources(self) -> list[DataSourceInput]:
+        """The data sources documented by the schema files, for the first use of the collection.
+
+        Connection details come from the matching QUERYMIND_DB_<NAME> in .env when it is set."""
+        env = env_database_urls()
+        seeds = []
+        for path in self.source_files():
+            if path.suffix.lower() != ".sql" or (source := from_schema_file(path)) is None:
+                continue
+            described = connection_from_url(env[source.name.lower()]) if source.name.lower() in env else None
+            if described and described[0] == source.type:
+                source = source.model_copy(update={"connection": described[1]})
+            seeds.append(source)
+        return seeds
 
     @property
     def cache(self) -> SemanticCache | None:

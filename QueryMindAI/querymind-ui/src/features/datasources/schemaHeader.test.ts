@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ECOMMERCE_MYSQL } from "@/features/datasources/defaults";
 import { buildSchemaHeader } from "@/features/datasources/schemaHeader";
-import type { DataSource } from "@/features/datasources/types";
+import type { DataSourceInput } from "@/features/datasources/types";
 
 describe("buildSchemaHeader", () => {
   it("renders every section in the schema-file comment format", () => {
@@ -29,13 +29,12 @@ describe("buildSchemaHeader", () => {
   });
 
   it("skips empty sections and names access paths per store type", () => {
-    const source: DataSource = {
-      id: "x",
+    const source: DataSourceInput = {
       name: "orders",
       type: "dynamodb",
       enabled: true,
       connection: { region: "us-east-1" },
-      sections: { purpose: "Order events.", joinPaths: "Query Orders by pk = USER#<id>.", tableOverview: "  " },
+      sections: { purpose: "Order events.", join_paths: "Query Orders by pk = USER#<id>.", table_overview: "  " },
     };
     const header = buildSchemaHeader(source);
     expect(header).toContain("-- STANDARD ACCESS PATTERNS (DynamoDB)");

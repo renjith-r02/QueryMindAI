@@ -1,17 +1,15 @@
-import { Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { SelectField } from "@/components/ui/SelectField";
 import { SwitchField } from "@/components/ui/Switch";
 import { buildSchemaHeader } from "@/features/datasources/schemaHeader";
-import { useDataSourceStore } from "@/features/datasources/store";
 import {
   DATA_SOURCE_TYPES,
+  defaultConnection,
   SECTION_KEYS,
   SECTIONS,
   sectionHeading,
   TYPE_INFO,
-  type DataSource,
+  type DataSourceInput,
   type DataSourceType,
 } from "@/features/datasources/types";
 import { SqlPanel } from "@/features/results/components/SqlPanel";
@@ -19,10 +17,17 @@ import { SqlPanel } from "@/features/results/components/SqlPanel";
 const INPUT = "min-h-11 rounded-xl border border-line bg-surface px-3 text-sm";
 const TYPE_LABELS = DATA_SOURCE_TYPES.map((type) => TYPE_INFO[type].label);
 
-export function DataSourceEditor({ source, onRemoved }: { source: DataSource; onRemoved: () => void }) {
-  const update = useDataSourceStore((state) => state.update);
-  const changeType = useDataSourceStore((state) => state.changeType);
-  const remove = useDataSourceStore((state) => state.remove);
+/** Edits a draft of a data source; the caller decides when to save it. */
+export function DataSourceEditor({
+  value: source,
+  onChange,
+}: {
+  value: DataSourceInput;
+  onChange: (draft: DataSourceInput) => void;
+}) {
+  const update = (patch: Partial<DataSourceInput>) => onChange({ ...source, ...patch });
+  const changeType = (type: DataSourceType) =>
+    onChange({ ...source, type, connection: defaultConnection(type, source.connection) });
   const info = TYPE_INFO[source.type];
 
   return (
@@ -31,18 +36,14 @@ export function DataSourceEditor({ source, onRemoved }: { source: DataSource; on
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm">
             <span className="font-medium">Name</span>
-            <input
-              value={source.name}
-              onChange={(event) => update(source.id, { name: event.target.value })}
-              className={INPUT}
-            />
+            <input value={source.name} onChange={(event) => update({ name: event.target.value })} className={INPUT} />
           </label>
           <SelectField
             label="Type"
             value={info.label}
             options={TYPE_LABELS}
             onChange={(label) =>
-              changeType(source.id, DATA_SOURCE_TYPES.find((type) => TYPE_INFO[type].label === label) as DataSourceType)
+              changeType(DATA_SOURCE_TYPES.find((type) => TYPE_INFO[type].label === label) as DataSourceType)
             }
           />
         </div>
@@ -50,7 +51,7 @@ export function DataSourceEditor({ source, onRemoved }: { source: DataSource; on
           label="Use this data source"
           detail="Disabled sources keep their settings but are not offered for questions."
           checked={source.enabled}
-          onChange={(enabled) => update(source.id, { enabled })}
+          onChange={(enabled) => update({ enabled })}
         />
       </Card>
 
@@ -63,16 +64,15 @@ export function DataSourceEditor({ source, onRemoved }: { source: DataSource; on
               <input
                 value={source.connection[field.key] ?? ""}
                 placeholder={field.placeholder}
-                onChange={(event) =>
-                  update(source.id, { connection: { ...source.connection, [field.key]: event.target.value } })
-                }
+                onChange={(event) => update({ connection: { ...source.connection, [field.key]: event.target.value } })}
                 className={INPUT}
               />
             </label>
           ))}
         </div>
         <p className="border-t border-line px-4 py-3 text-xs text-muted">
-          Passwords and keys are not stored here. Keep credentials in the server configuration.
+          Passwords are never stored here. Queries use these settings; any field left empty, and the password, come from
+          the server's QUERYMIND_DB_&lt;NAME&gt; setting in .env.
         </p>
       </Card>
 
@@ -88,7 +88,7 @@ export function DataSourceEditor({ source, onRemoved }: { source: DataSource; on
               <span className="text-xs text-muted">{SECTIONS[key].hint}</span>
               <textarea
                 value={source.sections[key] ?? ""}
-                onChange={(event) => update(source.id, { sections: { ...source.sections, [key]: event.target.value } })}
+                onChange={(event) => update({ sections: { ...source.sections, [key]: event.target.value } })}
                 rows={Math.min(14, Math.max(4, (source.sections[key] ?? "").split("\n").length + 1))}
                 spellCheck={false}
                 className="mt-1 rounded-xl border border-line bg-surface px-3 py-2 font-mono text-xs leading-5"
@@ -108,21 +108,6 @@ export function DataSourceEditor({ source, onRemoved }: { source: DataSource; on
           />
         </div>
       </details>
-
-      <div>
-        <Button
-          className="border-danger/40 text-danger"
-          onClick={() => {
-            if (window.confirm(`Delete the data source "${source.name}"?`)) {
-              remove(source.id);
-              onRemoved();
-            }
-          }}
-        >
-          <Trash2 className="size-4" />
-          Delete data source
-        </Button>
-      </div>
     </div>
   );
 }

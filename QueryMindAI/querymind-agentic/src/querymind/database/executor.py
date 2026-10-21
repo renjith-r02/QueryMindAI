@@ -78,6 +78,13 @@ class DatabaseRegistry:
         clone._objects = self._objects
         return clone
 
+    def dispose(self) -> None:
+        """Close pooled connections (when the registry is replaced)."""
+        for engine in self._engines.values():
+            engine.dispose()
+        self._engines.clear()
+        self._objects.clear()
+
     @property
     def names(self) -> list[str]:
         return sorted(self.urls)
@@ -111,7 +118,8 @@ class DatabaseRegistry:
             return QueryResult(
                 name,
                 sql,
-                error=f"No connection configured for database '{name}' (set {ENV_PREFIX}{name.upper()})",
+                error=f"No connection configured for database '{name}' (add it in Settings, or set "
+                f"{ENV_PREFIX}{name.upper()} in .env)",
                 error_kind="config",
             )
         try:

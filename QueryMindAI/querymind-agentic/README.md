@@ -44,6 +44,7 @@ querymind-agentic/
 │   ├── llm/                  # providers (Gemini, OpenAI), Gemini client and retries
 │   ├── intent/               # intent classifier: rules + model, before any SQL is written
 │   ├── cache/                # semantic cache: reuse recent answers without LLM calls
+│   ├── datasources/          # data source settings in Qdrant (seeded from sqls/ + .env); connection resolution
 │   ├── database/             # read-only executor, SQL safety checks, result merging
 │   └── agent/                # rag (retrieve + generate) and sql_agent (run / repair / answer)
 └── tests/                    # mirrors src/querymind; shared fakes in tests/support
@@ -89,6 +90,21 @@ which is reused for retrieval on a miss. An answer is reused when:
 Answered questions and UPDATE drafts are cached; failures and refusals are not. Re-indexing
 clears the cache. `run(..., use_cache=False)` (API: `"use_cache": false`) asks the model again
 and refreshes the entry. Disable with `QUERYMIND_CACHE_ENABLED=false`.
+
+## Database connections
+
+Queries connect to each database using its saved data source (Settings page, stored in
+Qdrant) first, with `QUERYMIND_DB_<NAME>` in `.env` as the fallback:
+
+- no saved data source: the `.env` URL is used as is;
+- saved and disabled: the database is not queried;
+- saved MySQL/PostgreSQL: its host, port, database and user; any empty field falls back to
+  the `.env` URL; the password always comes from `.env` (it is never stored in Qdrant);
+- saved but incomplete, or Cassandra/DynamoDB (not queryable yet): the `.env` URL if set;
+- data sources can't be read (Qdrant down): `.env` only.
+
+New data sources are seeded from `sqls/` with connection details from `.env`. Changes in
+Settings apply to the next question without a restart.
 
 ## Development
 

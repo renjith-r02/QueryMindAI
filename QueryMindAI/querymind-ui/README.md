@@ -54,8 +54,8 @@ npm run dev
 | `VITE_USE_MOCKS` | `true` forces mocks even when `VITE_API_URL` is set.           |
 
 Only asking questions uses the API. Home suggestions and the Admin screens
-still use mock data. Data sources in Settings are saved in the browser only and
-are not sent to the API yet. Guardrail and model settings in the Admin console
+still use mock data. Data sources in Settings are loaded from and saved to the API
+(`/datasources`, stored in Qdrant). Guardrail and model settings in the Admin console
 do not affect API answers; the server's configuration applies. The API allows
 browser requests from `http://localhost:8080` (`QUERYMIND_CORS_ORIGINS` in
 querymind-api).

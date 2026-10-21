@@ -1,4 +1,4 @@
-import { SECTION_KEYS, sectionHeading, TYPE_INFO, type DataSource } from "@/features/datasources/types";
+import { SECTION_KEYS, sectionHeading, TYPE_INFO, type DataSourceInput } from "@/features/datasources/types";
 
 const HEAVY = "-- " + "=".repeat(69);
 const LIGHT = "-- " + "-".repeat(69);
@@ -8,7 +8,7 @@ const LIGHT = "-- " + "-".repeat(69);
  * files under querymind-agentic/sqls/, which the indexer reads (`index` command).
  * Empty sections are left out.
  */
-export function buildSchemaHeader(source: DataSource): string {
+export function buildSchemaHeader(source: DataSourceInput): string {
   const target = source.connection.database || source.connection.keyspace || source.name;
   const lines = [
     HEAVY,

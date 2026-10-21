@@ -35,6 +35,7 @@ class Settings:
     cache_enabled: bool = True  # semantic cache of answers (see querymind.cache)
     cache_threshold: float = 0.95  # minimum cosine similarity to reuse an answer
     cache_ttl: int = 3600  # seconds an answer may be reused
+    datasources_collection: str = "querymind_datasources"  # Qdrant collection holding data source settings
     query_timeout: int = 30
     source_dir: Path = DEFAULT_SOURCE_DIR
 
@@ -60,6 +61,7 @@ class Settings:
             not in {"0", "false", "no", "off"},
             cache_threshold=float(os.getenv("QUERYMIND_CACHE_THRESHOLD") or cls.cache_threshold),
             cache_ttl=_int_env("QUERYMIND_CACHE_TTL") or cls.cache_ttl,
+            datasources_collection=os.getenv("QUERYMIND_DATASOURCES_COLLECTION") or cls.datasources_collection,
             query_timeout=_int_env("QUERYMIND_QUERY_TIMEOUT") or cls.query_timeout,
             source_dir=Path(os.getenv("QUERYMIND_SOURCE_DIR") or DEFAULT_SOURCE_DIR),
         )

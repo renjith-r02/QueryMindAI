@@ -52,6 +52,20 @@ curl -X POST localhost:8000/run -H 'content-type: application/json' \
      -d '{"question": "top 5 products by revenue this year", "max_rows": 100}'
 ```
 
+Data sources (used by the UI's Settings page), stored in the Qdrant collection
+`querymind_datasources` and seeded from the schema files on first use:
+
+| Method | Path                 | Purpose                                                      |
+| ------ | -------------------- | ------------------------------------------------------------ |
+| GET    | `/datasources`       | List data sources                                            |
+| POST   | `/datasources`       | Create one (201; 409 if the name is taken)                   |
+| GET    | `/datasources/{id}`  | Get one (404 if unknown)                                     |
+| PUT    | `/datasources/{id}`  | Replace one                                                  |
+| DELETE | `/datasources/{id}`  | Delete one (204)                                             |
+
+Connection fields depend on the type (MySQL, PostgreSQL, Cassandra, DynamoDB) and never
+include passwords; credentials stay in the server configuration.
+
 Admin settings (used by the UI's Admin console):
 
 | Method   | Path                        | Purpose                                                                 |
