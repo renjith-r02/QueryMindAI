@@ -376,6 +376,53 @@ and the per-case `execution_match` / `exact_match` / `reason` fields. If you cha
 few-shot library or the guardrails, rerun the full evaluation. The report header shows which inputs
 changed.
 
+### 10.6 Latest results
+
+The last full run, 21 October 2026, used `gemini-3.8-flash` (temperature 0), `gemini-embedding-001`
+embeddings, 32 few-shot examples and up to 2 self-repair attempts. The full report is in
+[`querymind-agentic/evaluation/reports/20261021-180137/report.md`](querymind-agentic/evaluation/reports/20261021-180137/report.md).
+
+| Metric | Result |
+| --- | ---: |
+| **Execution accuracy** (same result set as the ground truth) | **100%** (25/25) |
+| **Exact match rate** (normalised SQL text) | **32%** |
+| Semantic match rate (exact, or no edits in `sqlglot.diff`) | 72% |
+| Intent classification accuracy | 92% |
+| Guardrails compliance (9 destructive probes; none executed) | 100% |
+| Average time per question | 17.4 s |
+
+By query type:
+
+| Query type | Cases | Execution accuracy | Exact match | Semantic match |
+| --- | ---: | ---: | ---: | ---: |
+| Simple lookup (`SELECT_SIMPLE`) | 6 | 100% | 66.7% | 83.3% |
+| Aggregate (`SELECT_AGGREGATE`) | 7 | 100% | 14.3% | 85.7% |
+| Join (`SELECT_JOIN`) | 6 | 100% | 16.7% | 50.0% |
+| Temporal (`SELECT_TEMPORAL`) | 6 | 100% | 33.3% | 66.7% |
+
+By database:
+
+| Database | Cases | Execution accuracy | Exact match | Semantic match |
+| --- | ---: | ---: | ---: | ---: |
+| `ecommerce` (MySQL) | 14 | 100% | 21.4% | 57.1% |
+| `returns_db` (PostgreSQL) | 11 | 100% | 45.5% | 90.9% |
+
+What the numbers mean:
+
+- **Low exact match is expected.** The model often adds an `ORDER BY`, names output columns
+  differently, or joins tables in another order. These change the SQL text, not the result.
+- **Results vary between runs.** Two earlier full runs on the same day scored 100% and 96%
+  execution accuracy. The 96% run's only miss was an average rounded to 8.6 instead of 8.6477; the
+  harness now counts that as a match.
+- **One pass depends on the data.** T02, users who checked out as guests, added an unnecessary join
+  to `orders`. It matches only because every guest in the sample data has placed an order.
+- **Intent misses:** two questions were classified with another type (T02 as a join, T11 as
+  temporal). Their SQL was still correct.
+- **The sample data is small** (120 orders, 20 returns), so a wrong filter can return the same rows by
+  chance. Re-run the evaluation after loading more data.
+
+When you rerun the evaluation, update this section with the new report's numbers.
+
 ## Troubleshooting
 
 | Symptom                                                         | Fix                                                                                   |
