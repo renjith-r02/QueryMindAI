@@ -244,3 +244,19 @@ def test_update_env_file_quotes_and_removes(tmp_path):
         update_env_file(path, {"D": "line\nbreak"})
     for key in ("A", "B", "C"):
         os.environ.pop(key, None)
+
+
+def test_schema_is_read_from_the_schema_files(client):
+    files = client.get("/admin/schema").json()
+    assert [(f["database"], f["dialect"]) for f in files] == [("ecommerce", "mysql"), ("returns_db", "postgresql")]
+    tables = {t["name"]: t for t in files[0]["tables"]}
+    assert tables["orders"]["kind"] == "table" and tables["v_order_line_sales"]["kind"] == "view"
+    user_id = next(c for c in tables["orders"]["columns"] if c["name"] == "user_id")
+    assert user_id["references"] == "users.user_id" and user_id["nullable"] is False
+    assert user_id["description"].startswith("FK -> users.user_id")
+    assert tables["orders"]["primary_key"] == ["order_id"]
+
+    returns = client.get("/admin/schema", params={"database": "RETURNS_DB"}).json()
+    assert [t["name"] for t in returns[0]["tables"]][:2] == ["rma.returns", "rma.return_lines"]
+    missing = client.get("/admin/schema", params={"database": "nope"})
+    assert missing.status_code == 404 and "ecommerce, returns_db" in missing.json()["detail"]

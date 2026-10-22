@@ -30,9 +30,9 @@ from querymind.datasources import DataSource, DataSourceInput, DataSourceReposit
 from querymind.datasources.connections import connection_from_url, env_database_urls, resolve
 from querymind.exceptions import NoSourceFilesError
 from querymind.guardrails import GuardrailRepository, Guardrails, default_policy
-from querymind.ingest.models import Chunk
+from querymind.ingest.models import Chunk, SchemaFile
 from querymind.ingest.qa_loader import load_qa_file
-from querymind.ingest.sql_parser import parse_sql_file
+from querymind.ingest.sql_parser import describe_sql_file, parse_sql_file
 from querymind.intent import IntentClassifier
 from querymind.knowledge.embeddings import Embedder, create_embedder
 from querymind.knowledge.store import KnowledgeStore
@@ -296,6 +296,13 @@ class QueryMindService:
         if not directory.is_dir():
             return []
         return sorted(p for p in directory.iterdir() if p.is_file() and p.suffix.lower() in SOURCE_SUFFIXES)
+
+    def schema(self, database: str | None = None) -> list[SchemaFile]:
+        """Tables and views documented in the .sql source files, with columns, keys and comments.
+
+        Read from the files directly, so it needs no Qdrant, model or database connection."""
+        files = [describe_sql_file(path) for path in self.source_files() if path.suffix.lower() == ".sql"]
+        return [f for f in files if database is None or f.database.lower() == database.lower()]
 
     def parse(
         self, paths: list[Path] | None = None, database: str | None = None, dialect: str | None = None

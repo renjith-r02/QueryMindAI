@@ -1,11 +1,11 @@
 import { SUGGESTIONS } from "@/mocks/catalog";
 import { getGuardrails } from "@/mocks/guardrails";
 import { interpret } from "@/mocks/interpret";
-import { TABLES } from "@/mocks/schema";
+import { SCHEMA } from "@/mocks/schema";
 import type { AskOptions } from "@/api/query";
 import type { ProgressStep } from "@/types/progress";
 import type { AskOutcome } from "@/types/query";
-import type { SchemaTable } from "@/types/schema";
+import type { SchemaFile } from "@/types/schema";
 
 /** Simulated time per step, so the mock shows the same live progress as the real API. */
 const STEP_MS = 180;
@@ -70,8 +70,8 @@ function generatedMessage(outcome: AskOutcome): string {
   return "Wrote 1 query for ecommerce";
 }
 
-export async function getSchema(): Promise<SchemaTable[]> {
-  return TABLES;
+export async function getSchema(database?: string): Promise<SchemaFile[]> {
+  return SCHEMA.filter((file) => !database || file.database.toLowerCase() === database.toLowerCase());
 }
 
 export async function getExamples(): Promise<string[]> {

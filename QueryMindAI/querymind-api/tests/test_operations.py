@@ -3,7 +3,7 @@ import warnings
 import pytest
 from querymind.exceptions import MissingApiKeyError
 
-SOURCES = ["ecommerce_mysql_schema.sql", "returns_postgres_schema.sql"]
+SOURCES = ["ecommerce_mysql_schema.sql", "few_shot_examples.json", "returns_postgres_schema.sql"]
 
 
 def test_list_sources(client):

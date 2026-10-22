@@ -7,7 +7,7 @@ import { useHistoryStore } from "@/features/history/store";
 import { formatWhen } from "@/lib/format";
 
 export async function loader() {
-  return { tableCount: (await getSchema()).length };
+  return { tableCount: (await getSchema()).reduce((count, file) => count + file.tables.length, 0) };
 }
 
 export function OverviewPage() {

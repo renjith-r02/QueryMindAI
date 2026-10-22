@@ -18,7 +18,7 @@ import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from querymind.ingest.models import Chunk
+from querymind.ingest.models import Chunk, ForeignKey, SchemaColumn, SchemaFile, SchemaRelation
 
 # A comment block with more lines than this (and not followed directly by a
 # statement) is treated as documentation rather than an annotation.
@@ -50,6 +50,14 @@ _CONSTRAINT = re.compile(
     re.I,
 )
 _FOREIGN_KEY = re.compile(rf"FOREIGN\s+KEY\s*\(([^)]*)\)\s*REFERENCES\s+{_NAME}\s*\(([^)]*)\)", re.I)
+_PRIMARY_KEY = re.compile(r"PRIMARY\s+KEY\s*\(([^)]*)\)", re.I)
+_INLINE_REFERENCES = re.compile(rf"\bREFERENCES\s+{_NAME}\s*\(([^)]*)\)", re.I)
+# Where a column definition's type ends and its options begin.
+_COLUMN_OPTIONS = re.compile(
+    r"\s+(?:NOT\s+NULL|NULL|DEFAULT|PRIMARY\s+KEY|GENERATED|REFERENCES|AUTO_INCREMENT|UNIQUE|CHECK|CONSTRAINT"
+    r"|ON\s+UPDATE|COLLATE|CHARACTER\s+SET)\b",
+    re.I,
+)
 
 
 @dataclass
@@ -104,21 +112,36 @@ def parse_sql_file(path: str | Path, database: str | None = None, dialect: str |
 
 
 def parse_sql(text: str, source: str, database: str | None = None, dialect: str | None = None) -> list[Chunk]:
-    segments = _split_segments(text)
-    doc_blocks, statements = _classify_segments(segments)
+    doc_blocks, statements, ctx = _prepare(text, source, database, dialect)
+    chunks: list[Chunk] = []
+    for index, block in enumerate(doc_blocks):
+        chunks.extend(_doc_block_chunks(block, ctx, is_header=index == 0))
+    chunks.extend(_statement_chunks(statements, ctx))
+    return chunks
 
+
+def describe_sql_file(path: str | Path, database: str | None = None, dialect: str | None = None) -> SchemaFile:
+    """The tables and views of an annotated schema file, with their columns, keys and comments."""
+    path = Path(path)
+    _, statements, ctx = _prepare(path.read_text(encoding="utf-8"), path.name, database, dialect)
+    relations, _ = _collect_relations(statements, ctx)
+    return SchemaFile(
+        database=ctx.database,
+        dialect=ctx.dialect,
+        source=ctx.source,
+        tables=[_describe(relation, ctx.dialect) for relation in relations.values()],
+    )
+
+
+def _prepare(text: str, source: str, database: str | None, dialect: str | None):
+    doc_blocks, statements = _classify_segments(_split_segments(text))
     header = "\n".join(line for block in doc_blocks[:1] for line in block)
     ctx = _Context(
         database=database or _detect_database(header, statements, source),
         dialect=dialect or _detect_dialect(header, source),
         source=source,
     )
-
-    chunks: list[Chunk] = []
-    for index, block in enumerate(doc_blocks):
-        chunks.extend(_doc_block_chunks(block, ctx, is_header=index == 0))
-    chunks.extend(_statement_chunks(statements, ctx))
-    return chunks
+    return doc_blocks, statements, ctx
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +449,15 @@ def _parse_table(sql: str, match: re.Match, annotation: str) -> _Relation:
 
 
 def _statement_chunks(statements: list[tuple[str, str]], ctx: _Context) -> list[Chunk]:
+    relations, chunks = _collect_relations(statements, ctx)
+    for relation in relations.values():
+        chunks.append(_relation_chunk(relation, ctx))
+        chunks.extend(_column_chunks(relation, ctx))
+    return chunks
+
+
+def _collect_relations(statements: list[tuple[str, str]], ctx: _Context) -> tuple[dict[str, _Relation], list[Chunk]]:
+    """Tables and views (with comments, indexes and triggers attached), plus routine and schema chunks."""
     relations: dict[str, _Relation] = {}
     column_comments: dict[tuple[str, str], str] = {}
     chunks: list[Chunk] = []
@@ -462,9 +494,81 @@ def _statement_chunks(statements: list[tuple[str, str]], ctx: _Context) -> list[
     for relation in relations.values():
         for column in relation.columns:
             column.comment = column_comments.get((relation.name, column.name), column.comment)
-        chunks.append(_relation_chunk(relation, ctx))
-        chunks.extend(_column_chunks(relation, ctx))
-    return chunks
+    return relations, chunks
+
+
+def _view_columns(ddl: str, dialect: str) -> list[str]:
+    """Output column names of a view's SELECT (empty if it can't be parsed)."""
+    import sqlglot
+    from sqlglot import exp
+
+    try:
+        tree = sqlglot.parse_one(ddl, read="postgres" if dialect == "postgresql" else dialect)
+    except sqlglot.errors.ParseError:
+        return []
+    select = tree.find(exp.Select)
+    return [name for name in select.named_selects if name] if select else []
+
+
+def _describe(relation: _Relation, dialect: str) -> SchemaRelation:
+    primary_key: list[str] = []
+    foreign_keys: list[ForeignKey] = []
+    for constraint in relation.constraints:
+        if fk := _FOREIGN_KEY.search(constraint):
+            foreign_keys.append(
+                ForeignKey(
+                    columns=_name_list(fk.group(1)),
+                    references_table=_clean_name(fk.group(2)),
+                    references_columns=_name_list(fk.group(3)),
+                )
+            )
+        elif pk := _PRIMARY_KEY.search(constraint):
+            primary_key = _name_list(pk.group(1))
+
+    source_columns = relation.columns
+    if relation.kind == "view" and not source_columns:
+        source_columns = [_Column(name, "") for name in _view_columns(relation.ddl, dialect)]
+    columns = []
+    for column in source_columns:
+        definition = column.definition
+        inline_pk = bool(re.search(r"\bPRIMARY\s+KEY\b", definition, re.I))
+        if inline_pk and column.name not in primary_key:
+            primary_key.append(column.name)
+        references = None
+        if ref := _INLINE_REFERENCES.search(definition):
+            references = f"{_clean_name(ref.group(1))}.{_name_list(ref.group(2))[0]}"
+        elif fk := next((f for f in foreign_keys if f.columns == [column.name]), None):
+            references = f"{fk.references_table}.{fk.references_columns[0]}"
+        is_table = relation.kind == "table"
+        columns.append(
+            SchemaColumn(
+                name=column.name,
+                data_type=" ".join(_COLUMN_OPTIONS.split(definition, maxsplit=1)[0].split()) or None,
+                nullable=None if not is_table else not re.search(r"\bNOT\s+NULL\b", definition, re.I) and not inline_pk,
+                primary_key=column.name in primary_key,
+                references=references,
+                description=column.comment,
+            )
+        )
+    for column in columns:  # table-level PRIMARY KEY (...) found after the columns
+        column.primary_key = column.name in primary_key
+        if column.primary_key:
+            column.nullable = False if relation.kind == "table" else None
+
+    return SchemaRelation(
+        name=relation.name,
+        kind=relation.kind,
+        description=relation.comment,
+        notes=relation.annotation,
+        columns=columns,
+        primary_key=primary_key,
+        foreign_keys=foreign_keys,
+        indexes=relation.indexes,
+    )
+
+
+def _name_list(text: str) -> list[str]:
+    return [_clean_name(name.strip()) for name in text.split(",") if name.strip()]
 
 
 def _relation_chunk(relation: _Relation, ctx: _Context) -> Chunk:

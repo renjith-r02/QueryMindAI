@@ -386,6 +386,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CacheStatsOut'
+  /admin/schema:
+    get:
+      tags:
+      - admin
+      summary: Database schema from the schema files
+      description: 'Tables and views of each database, read from the annotated schema
+        files in
+
+        querymind-agentic/sqls (the same files that are indexed for retrieval): columns
+        with type,
+
+        nullability, keys, references and descriptions. Needs no database connection.'
+      operationId: read_schema_admin_schema_get
+      parameters:
+      - name: database
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Only this database, e.g. ecommerce or returns_db
+          title: Database
+        description: Only this database, e.g. ecommerce or returns_db
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaFile'
+                title: Response Read Schema Admin Schema Get
+        '404':
+          description: No schema file documents that database
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /admin/okta:
     get:
       tags:
@@ -1032,6 +1074,27 @@ components:
       - answer
       - caveats
       title: FinalAnswer
+    ForeignKey:
+      properties:
+        columns:
+          items:
+            type: string
+          type: array
+          title: Columns
+        references_table:
+          type: string
+          title: References Table
+        references_columns:
+          items:
+            type: string
+          type: array
+          title: References Columns
+      type: object
+      required:
+      - columns
+      - references_table
+      - references_columns
+      title: ForeignKey
     GeneratedQuery:
       properties:
         database:
@@ -1919,6 +1982,113 @@ components:
       - attempts
       - context
       title: RunResponse
+    SchemaColumn:
+      properties:
+        name:
+          type: string
+          title: Name
+        data_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Data Type
+          description: As declared, e.g. VARCHAR(255); null for views
+        nullable:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Nullable
+          description: null when unknown (views)
+        primary_key:
+          type: boolean
+          title: Primary Key
+          default: false
+        references:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: References
+          description: table.column this column points to, if any
+        description:
+          type: string
+          title: Description
+          default: ''
+      type: object
+      required:
+      - name
+      title: SchemaColumn
+    SchemaFile:
+      properties:
+        database:
+          type: string
+          title: Database
+        dialect:
+          type: string
+          title: Dialect
+        source:
+          type: string
+          title: Source
+        tables:
+          items:
+            $ref: '#/components/schemas/SchemaRelation'
+          type: array
+          title: Tables
+      type: object
+      required:
+      - database
+      - dialect
+      - source
+      - tables
+      title: SchemaFile
+      description: Tables and views documented by one annotated schema file.
+    SchemaRelation:
+      properties:
+        name:
+          type: string
+          title: Name
+          description: Schema-qualified when the file uses a schema, e.g. rma.returns
+        kind:
+          type: string
+          enum:
+          - table
+          - view
+          title: Kind
+        description:
+          type: string
+          title: Description
+          description: The table comment
+          default: ''
+        notes:
+          type: string
+          title: Notes
+          description: The comment block written above the statement
+          default: ''
+        columns:
+          items:
+            $ref: '#/components/schemas/SchemaColumn'
+          type: array
+          title: Columns
+        primary_key:
+          items:
+            type: string
+          type: array
+          title: Primary Key
+        foreign_keys:
+          items:
+            $ref: '#/components/schemas/ForeignKey'
+          type: array
+          title: Foreign Keys
+        indexes:
+          items:
+            type: string
+          type: array
+          title: Indexes
+      type: object
+      required:
+      - name
+      - kind
+      - columns
+      title: SchemaRelation
     SearchHitOut:
       properties:
         score:

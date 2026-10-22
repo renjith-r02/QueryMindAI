@@ -3,7 +3,9 @@ from collections import Counter
 
 import pytest
 
-from querymind.ingest import load_qa_file, parse_sql, parse_sql_file
+from querymind.config import Settings
+from querymind.ingest import describe_sql_file, load_qa_file, parse_sql, parse_sql_file
+from querymind.service import QueryMindService
 from support.fakes import SQLS
 
 
@@ -134,3 +136,36 @@ def test_qa_file_rejects_incomplete_pair(tmp_path):
     path.write_text(json.dumps({"pairs": [{"question": "No answer"}]}))
     with pytest.raises(ValueError):
         load_qa_file(path)
+
+
+def test_describe_sql_file_returns_typed_tables_and_views():
+    mysql = describe_sql_file(SQLS / "ecommerce_mysql_schema.sql")
+    assert (mysql.database, mysql.dialect) == ("ecommerce", "mysql")
+    tables = {t.name: t for t in mysql.tables}
+    lines = tables["order_lines"]
+    assert lines.primary_key == ["order_line_id"]
+    assert {(fk.columns[0], fk.references_table) for fk in lines.foreign_keys} >= {
+        ("order_id", "orders"), ("product_id", "products")
+    }  # fmt: skip
+    columns = {c.name: c for c in tables["orders"].columns}
+    assert columns["status"].data_type.startswith("ENUM('pending'")
+    assert columns["user_id"].references == "users.user_id" and not columns["user_id"].nullable
+    assert columns["coupon_code"].nullable and columns["order_id"].primary_key
+    assert tables["users"].description.startswith("Customers.")
+    # Views get their output columns from the SELECT; types are unknown.
+    view = tables["v_product_current_price"]
+    assert view.kind == "view" and "effective_price" in [c.name for c in view.columns]
+    assert view.columns[0].data_type is None and view.columns[0].nullable is None
+
+    postgres = describe_sql_file(SQLS / "returns_postgres_schema.sql")
+    returns = {c.name: c for c in postgres.tables[0].columns}
+    assert postgres.tables[0].name == "rma.returns" and returns["return_id"].primary_key
+    assert returns["refund_amount"].data_type == "numeric(12,2)"
+    assert returns["order_id"].description  # from COMMENT ON COLUMN
+
+
+def test_service_schema_reads_only_sql_files():
+    service = QueryMindService(Settings(qdrant_url=":memory:", source_dir=SQLS))
+    assert [f.database for f in service.schema()] == ["ecommerce", "returns_db"]
+    assert [f.database for f in service.schema("RETURNS_DB")] == ["returns_db"]
+    assert service.schema("missing") == []

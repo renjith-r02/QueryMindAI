@@ -214,7 +214,10 @@ business rules). Cassandra and DynamoDB sources can be documented but not querie
   UPDATE, DELETE, DROP, ...), are locked: they can be reworded but not removed or disabled. If
   Qdrant can't be read, the built-in policy applies. *Try it* checks a question or SQL against
   unsaved changes. API: `GET/PUT /guardrails`, `POST /guardrails/reset`, `POST /guardrails/check`.
-- **Logs**, **Schema**, **Overview**.
+- **Schema**: every table and view of both databases, with column types, keys, references and
+  descriptions. It is read by `GET /admin/schema` from the schema files in `querymind-agentic/sqls/`,
+  so edits to those files show up on the next page load, without re-indexing.
+- **Logs**, **Overview**.
 
 > The API has no authentication yet. Run it on your machine or a trusted network only.
 

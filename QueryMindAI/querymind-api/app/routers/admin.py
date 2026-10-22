@@ -1,4 +1,4 @@
-"""Admin settings: the language/embedding model and Okta, saved to the .env config files.
+"""Admin endpoints: the documented schema, the semantic cache, and the model and Okta settings.
 
 Model settings live in querymind-agentic/.env (the keys the agent reads), Okta settings
 in querymind-api/.env. Saving applies them immediately; no restart is needed.
@@ -12,10 +12,11 @@ from urllib.parse import urlparse
 
 import httpx
 import openai
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from google.genai import errors as genai_errors
 from querymind.config import PROJECT_DIR as AGENT_DIR
 from querymind.exceptions import MissingApiKeyError
+from querymind.ingest import SchemaFile
 from querymind.knowledge.embeddings import DEFAULT_MODELS as EMBEDDING_DEFAULTS
 from querymind.llm import DEFAULT_LLM_MODELS, REASONING_EFFORTS, create_llm
 from querymind.service import QueryMindService
@@ -206,6 +207,28 @@ def clear_cache(service: Service) -> CacheStatsOut:
     """Drop every cached answer, e.g. after the data changed. Re-indexing also clears it."""
     service.clear_cache()
     return CacheStatsOut.model_validate(service.cache_stats())
+
+
+@router.get(
+    "/schema",
+    response_model=list[SchemaFile],
+    responses={404: {"description": "No schema file documents that database"}},
+    summary="Database schema from the schema files",
+)
+def read_schema(
+    service: Service,
+    database: Annotated[str | None, Query(description="Only this database, e.g. ecommerce or returns_db")] = None,
+) -> list[SchemaFile]:
+    """Tables and views of each database, read from the annotated schema files in
+    querymind-agentic/sqls (the same files that are indexed for retrieval): columns with type,
+    nullability, keys, references and descriptions. Needs no database connection."""
+    files = service.schema(database)
+    if database is not None and not files:
+        available = ", ".join(f.database for f in service.schema()) or "none"
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"No schema file for database {database!r}. Available: {available}."
+        )
+    return files
 
 
 def _reload_service() -> None:

@@ -1,21 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ClaudeCodeEditorTabs">
-    <option name="activeSessionId" value="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" />
+    <option name="activeSessionId" value="46602852-2176-47b4-9925-04a34005381a" />
     <option name="openSessionIds">
       <list>
         <option value="ca2eede8-e7b0-4edc-bed5-691dee237b5c" />
-        <option value="77e40cf7-1acb-4bbe-9aa7-f1f6bc35a44c" />
-        <option value="50a34a17-99fa-49df-8cf3-56a858bdf529" />
         <option value="d35b124b-2d58-4b0d-a427-fe8fc3f453fe" />
         <option value="7ab0dcfc-8060-46e3-96d9-1456cf95cc26" />
         <option value="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" />
+        <option value="46602852-2176-47b4-9925-04a34005381a" />
       </list>
     </option>
     <option name="sessionPaths">
       <map>
-        <entry key="50a34a17-99fa-49df-8cf3-56a858bdf529" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
-        <entry key="77e40cf7-1acb-4bbe-9aa7-f1f6bc35a44c" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
+        <entry key="46602852-2176-47b4-9925-04a34005381a" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
         <entry key="7ab0dcfc-8060-46e3-96d9-1456cf95cc26" value="/sessions/new" />
         <entry key="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
         <entry key="ca2eede8-e7b0-4edc-bed5-691dee237b5c" value="/sessions/ad8ddff9-a54d-4692-8322-2a5bfd2f2c78" />
@@ -24,8 +22,7 @@
     </option>
     <option name="sessionTitles">
       <map>
-        <entry key="50a34a17-99fa-49df-8cf3-56a858bdf529" value="analyze querymind-ui and share how structure can b" />
-        <entry key="77e40cf7-1acb-4bbe-9aa7-f1f6bc35a44c" value="analyze querymind-ui and share how structure can b" />
+        <entry key="46602852-2176-47b4-9925-04a34005381a" value="analyze querymind-ui and share how structure can b" />
         <entry key="7ab0dcfc-8060-46e3-96d9-1456cf95cc26" value="Claude Code" />
         <entry key="947c7d4e-cbf6-481d-9573-ac6a65c7fc53" value="analyze querymind-ui and share how structure can b" />
         <entry key="ca2eede8-e7b0-4edc-bed5-691dee237b5c" value="analyze querymind-ui and share how structure can b" />

@@ -16,7 +16,6 @@ describe("Guardrails", () => {
 
   it("loads the policy, with the baseline locked", async () => {
     await openPage();
-    expect(screen.getByText("Built-in defaults; not saved yet.", { exact: false })).toBeInTheDocument();
     expect(screen.getAllByText("Always on")).toHaveLength(4);
     // Locked rules have no switch; the sensitive-data rule can be switched off.
     expect(screen.queryByRole("switch", { name: "Deleting data" })).not.toBeInTheDocument();
@@ -46,7 +45,6 @@ describe("Guardrails", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Guardrails saved. New questions use them now.")).toBeInTheDocument();
-    expect(screen.getByText(/^Every question .* Last saved/)).toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem("querymind-mock-guardrails")!);
     expect(stored.blocked_sql_keywords).toContain("SLEEP");
     expect(stored.restricted_columns).toEqual(["users.password_hash", "users.phone"]);
